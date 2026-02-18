@@ -6,17 +6,13 @@ Install the macOS Ecosystem MCP Server using a pre-built binary (no Node.js/Bun 
 
 ### 1. Download the Binary
 
-**For Apple Silicon (M1/M2/M3):**
+**For Apple Silicon (M1/M2/M3/M4):**
 ```bash
 curl -L https://github.com/neverprepared/macos-ecosystem-mcp/releases/latest/download/macos-mcp-arm64 -o macos-mcp
 chmod +x macos-mcp
 ```
 
-**For Intel Macs:**
-```bash
-curl -L https://github.com/neverprepared/macos-ecosystem-mcp/releases/latest/download/macos-mcp-x86_64 -o macos-mcp
-chmod +x macos-mcp
-```
+> **Note for Intel Macs**: Currently only Apple Silicon binaries are provided. Intel Macs can run the binary via Rosetta 2, or install from source (see below).
 
 ### 2. Move to a Permanent Location
 

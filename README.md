@@ -39,16 +39,13 @@ Unlike raw AppleScript execution servers (which are dangerous due to arbitrary c
 **No Node.js required!** Download a pre-built binary from [GitHub Releases](https://github.com/neverprepared/macos-ecosystem-mcp/releases):
 
 ```bash
-# For Apple Silicon (M1/M2/M3)
+# For Apple Silicon (M1/M2/M3/M4)
 curl -L https://github.com/neverprepared/macos-ecosystem-mcp/releases/latest/download/macos-mcp-arm64 -o macos-mcp
 chmod +x macos-mcp
 sudo mv macos-mcp /usr/local/bin/
-
-# For Intel Macs
-curl -L https://github.com/neverprepared/macos-ecosystem-mcp/releases/latest/download/macos-mcp-x86_64 -o macos-mcp
-chmod +x macos-mcp
-sudo mv macos-mcp /usr/local/bin/
 ```
+
+> **Note**: Intel Macs can run via Rosetta 2 or install from source.
 
 See [BINARY_INSTALL.md](BINARY_INSTALL.md) for detailed instructions.
 
