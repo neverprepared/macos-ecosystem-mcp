@@ -4,20 +4,24 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  CallToolRequest,
+} from '@modelcontextprotocol/sdk/types.js';
 import { logger } from './shared/logger.js';
 
 // Import app tool registrations
 import {
-  registerRemindersTools,
+  handleRemindersTool,
   getRemindersToolDefinitions,
 } from './apps/reminders/index.js';
 import {
-  registerCalendarTools,
+  handleCalendarTool,
   getCalendarToolDefinitions,
 } from './apps/calendar/index.js';
 import {
-  registerNotesTools,
+  handleNotesTool,
   getNotesToolDefinitions,
 } from './apps/notes/index.js';
 
@@ -69,17 +73,38 @@ export async function startServer(): Promise<void> {
     };
   });
 
-  // Register all app tools
+  // Register unified tool call handler
   logger.info('Registering app tools');
 
-  registerRemindersTools(server);
-  logger.debug('Registered Reminders tools', { count: 4 });
+  server.setRequestHandler(
+    CallToolRequestSchema,
+    async (request: CallToolRequest) => {
+      const toolName = request.params.name;
 
-  registerCalendarTools(server);
-  logger.debug('Registered Calendar tools', { count: 5 });
+      logger.debug('Tool call received', { tool: toolName });
 
-  registerNotesTools(server);
-  logger.debug('Registered Notes tools', { count: 3 });
+      // Route to appropriate handler
+      if (toolName.startsWith('reminders_')) {
+        return handleRemindersTool(request);
+      } else if (toolName.startsWith('calendar_')) {
+        return handleCalendarTool(request);
+      } else if (toolName.startsWith('notes_')) {
+        return handleNotesTool(request);
+      }
+
+      // Unknown tool
+      logger.warn('Unknown tool requested', { tool: toolName });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Unknown tool: ${toolName}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  );
 
   logger.info('All tools registered successfully', { totalTools: 12 });
 

@@ -2,8 +2,7 @@
  * Calendar app MCP tool registrations
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { executeScript } from '../../executor/applescript.js';
 import { logger } from '../../shared/logger.js';
 import {
@@ -76,12 +75,13 @@ function parseFreeTimeOutput(output: string): FreeTimeSlot[] {
 }
 
 /**
- * Registers all Calendar app tools with the MCP server
+ * Handles all Calendar app tool calls
  */
-export function registerCalendarTools(server: Server): void {
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    // Tool 1: Create Event
-    if (request.params.name === 'calendar_create_event') {
+export async function handleCalendarTool(
+  request: CallToolRequest
+): Promise<CallToolResult> {
+  // Tool 1: Create Event
+  if (request.params.name === 'calendar_create_event') {
       try {
         const input = CreateEventInputSchema.parse(request.params.arguments);
 
@@ -360,16 +360,15 @@ export function registerCalendarTools(server: Server): void {
       }
     }
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Unknown tool: ${request.params.name}`,
-        },
-      ],
-      isError: true,
-    };
-  });
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `Unknown tool: ${request.params.name}`,
+      },
+    ],
+    isError: true,
+  };
 }
 
 /**

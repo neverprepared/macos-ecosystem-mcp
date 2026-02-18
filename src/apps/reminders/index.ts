@@ -2,8 +2,7 @@
  * Reminders app MCP tool registrations
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { executeScript } from '../../executor/applescript.js';
 import { logger } from '../../shared/logger.js';
 import { appleScriptToPriority } from '../../shared/utils.js';
@@ -51,14 +50,15 @@ function parseReminderOutput(output: string): Reminder[] {
 }
 
 /**
- * Registers all Reminders app tools with the MCP server
+ * Handles all Reminders app tool calls
  */
-export function registerRemindersTools(server: Server): void {
+export async function handleRemindersTool(
+  request: CallToolRequest
+): Promise<CallToolResult> {
   // Tool 1: Add Reminder
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (request.params.name === 'reminders_add') {
-      try {
-        const input = AddReminderInputSchema.parse(request.params.arguments);
+  if (request.params.name === 'reminders_add') {
+    try {
+      const input = AddReminderInputSchema.parse(request.params.arguments);
 
         logger.info('Adding reminder', { title: input.title, list: input.list });
 
@@ -283,17 +283,16 @@ export function registerRemindersTools(server: Server): void {
       }
     }
 
-    // If we get here, the tool wasn't handled
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Unknown tool: ${request.params.name}`,
-        },
-      ],
-      isError: true,
-    };
-  });
+  // If we get here, the tool wasn't handled
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `Unknown tool: ${request.params.name}`,
+      },
+    ],
+    isError: true,
+  };
 }
 
 /**
