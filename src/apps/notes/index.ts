@@ -23,7 +23,7 @@ import type { Note } from './types.js';
  * Format: id||name||folder||excerpt||created||modified
  */
 function parseNoteOutput(output: string): Note[] {
-  const lines = output.trim().split('\\n').filter(Boolean);
+  const lines = output.trim().split('\n').filter(Boolean);
   const notes: Note[] = [];
 
   for (const line of lines) {

@@ -103,7 +103,7 @@ describe('Calendar Script Generation', () => {
       });
 
       expect(script).toContain('set allCalendars to calendars');
-      expect(script).toContain('repeat with cal in allCalendars');
+      expect(script).toContain('repeat with i from 1 to calCount');
     });
   });
 

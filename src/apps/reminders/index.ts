@@ -25,7 +25,7 @@ import type { Reminder } from './types.js';
  * Format: id||name||completed||priority||flagged||notes||dueDate||listName
  */
 function parseReminderOutput(output: string): Reminder[] {
-  const lines = output.trim().split('\\n').filter(Boolean);
+  const lines = output.trim().split('\n').filter(Boolean);
   const reminders: Reminder[] = [];
 
   for (const line of lines) {
@@ -120,7 +120,7 @@ export async function handleRemindersTool(
           script,
           app: 'Reminders',
           operation: 'list',
-          timeout: 15000,
+          timeout: 30000,
         });
 
         const reminders = parseReminderOutput(result).slice(0, input.limit);
@@ -233,7 +233,7 @@ export async function handleRemindersTool(
           script,
           app: 'Reminders',
           operation: 'search',
-          timeout: 15000,
+          timeout: 30000,
         });
 
         const reminders = parseReminderOutput(result).slice(0, input.limit);

@@ -78,7 +78,7 @@ describe('Notes Script Generation', () => {
       });
 
       expect(script).toContain('set allFolders to folders');
-      expect(script).toContain('repeat with fld in allFolders');
+      expect(script).toContain('repeat with i from 1 to folderCount');
     });
   });
 
@@ -111,7 +111,7 @@ describe('Notes Script Generation', () => {
       });
 
       expect(script).toContain('set allFolders to folders');
-      expect(script).toContain('repeat with fld in allFolders');
+      expect(script).toContain('repeat with i from 1 to folderCount');
     });
 
     it('should truncate excerpt to 200 characters', () => {

@@ -83,30 +83,35 @@ tell application "Calendar"
     set startDate to date "${appleStartDate}"
     set endDate to date "${appleEndDate}"
 
-    set eventList to (events of targetCalendar whose start date ≥ startDate and start date ≤ endDate)
-    set output to ""
+    set evtFilter to (events of targetCalendar whose start date ≥ startDate and start date ≤ endDate)
+    set outputList to {}
+    set calName to name of targetCalendar
+    set c to count of evtFilter
 
-    repeat with evt in eventList
-        set eventId to uid of evt
-        set eventTitle to summary of evt
-        set eventStart to start date of evt as string
-        set eventEnd to end date of evt as string
-        set eventAllDay to allday event of evt
+    if c > 0 then
+        set theIds to uid of evtFilter
+        set theTitles to summary of evtFilter
+        set theStarts to start date of evtFilter
+        set theEnds to end date of evtFilter
+        set theAllDay to allday event of evtFilter
+        set theLocations to location of evtFilter
+        set theNotes to description of evtFilter
 
-        set eventLocation to ""
-        try
-            set eventLocation to location of evt
-        end try
+        repeat with j from 1 to c
+            set eventStart to short date string of (item j of theStarts) & " " & time string of (item j of theStarts)
+            set eventEnd to short date string of (item j of theEnds) & " " & time string of (item j of theEnds)
+            set eventLocation to item j of theLocations
+            if eventLocation is missing value then set eventLocation to ""
+            set eventNotes to item j of theNotes
+            if eventNotes is missing value then set eventNotes to ""
+            set end of outputList to (item j of theIds) & "||" & (item j of theTitles) & "||" & eventStart & "||" & eventEnd & "||" & (item j of theAllDay) & "||" & eventLocation & "||" & eventNotes & "||" & calName
+        end repeat
+    end if
 
-        set eventNotes to ""
-        try
-            set eventNotes to description of evt
-        end try
-
-        set output to output & eventId & "||" & eventTitle & "||" & eventStart & "||" & eventEnd & "||" & eventAllDay & "||" & eventLocation & "||" & eventNotes & "||" & name of targetCalendar & "\\n"
-    end repeat
-
-    return output
+    set AppleScript's text item delimiters to "\\n"
+    set outputText to outputList as text
+    set AppleScript's text item delimiters to ""
+    return outputText
 end tell
     `.trim();
   } else {
@@ -115,33 +120,40 @@ tell application "Calendar"
     set startDate to date "${appleStartDate}"
     set endDate to date "${appleEndDate}"
     set allCalendars to calendars
-    set output to ""
+    set outputList to {}
 
-    repeat with cal in allCalendars
-        set eventList to (events of cal whose start date ≥ startDate and start date ≤ endDate)
+    set calCount to count of allCalendars
+    repeat with i from 1 to calCount
+        set cal to item i of allCalendars
+        set calName to name of cal
+        set evtFilter to (events of cal whose start date ≥ startDate and start date ≤ endDate)
+        set c to count of evtFilter
 
-        repeat with evt in eventList
-            set eventId to uid of evt
-            set eventTitle to summary of evt
-            set eventStart to start date of evt as string
-            set eventEnd to end date of evt as string
-            set eventAllDay to allday event of evt
+        if c > 0 then
+            set theIds to uid of evtFilter
+            set theTitles to summary of evtFilter
+            set theStarts to start date of evtFilter
+            set theEnds to end date of evtFilter
+            set theAllDay to allday event of evtFilter
+            set theLocations to location of evtFilter
+            set theNotes to description of evtFilter
 
-            set eventLocation to ""
-            try
-                set eventLocation to location of evt
-            end try
-
-            set eventNotes to ""
-            try
-                set eventNotes to description of evt
-            end try
-
-            set output to output & eventId & "||" & eventTitle & "||" & eventStart & "||" & eventEnd & "||" & eventAllDay & "||" & eventLocation & "||" & eventNotes & "||" & name of cal & "\\n"
-        end repeat
+            repeat with j from 1 to c
+                set eventStart to short date string of (item j of theStarts) & " " & time string of (item j of theStarts)
+                set eventEnd to short date string of (item j of theEnds) & " " & time string of (item j of theEnds)
+                set eventLocation to item j of theLocations
+                if eventLocation is missing value then set eventLocation to ""
+                set eventNotes to item j of theNotes
+                if eventNotes is missing value then set eventNotes to ""
+                set end of outputList to (item j of theIds) & "||" & (item j of theTitles) & "||" & eventStart & "||" & eventEnd & "||" & (item j of theAllDay) & "||" & eventLocation & "||" & eventNotes & "||" & calName
+            end repeat
+        end if
     end repeat
 
-    return output
+    set AppleScript's text item delimiters to "\\n"
+    set outputText to outputList as text
+    set AppleScript's text item delimiters to ""
+    return outputText
 end tell
     `.trim();
   }
@@ -176,20 +188,19 @@ tell application "Calendar"
 
     -- Get events for the day
     set dayEvents to (events of ${calendarFilter} whose start date ≥ workStart and start date < workEnd)
+    set c to count of dayEvents
 
-    -- Sort events by start time (simple bubble sort)
-    set sortedEvents to {}
-    repeat with evt in dayEvents
-        set end of sortedEvents to {start date of evt, end date of evt}
-    end repeat
+    -- Batch fetch start and end dates
+    set theStarts to start date of dayEvents
+    set theEnds to end date of dayEvents
 
     -- Find gaps between events
     set output to ""
     set currentTime to workStart
 
-    repeat with eventPair in sortedEvents
-        set eventStart to item 1 of eventPair
-        set eventEnd to item 2 of eventPair
+    repeat with i from 1 to c
+        set eventStart to item i of theStarts
+        set eventEnd to item i of theEnds
 
         -- Calculate gap before this event
         set gapMinutes to (eventStart - currentTime) / 60

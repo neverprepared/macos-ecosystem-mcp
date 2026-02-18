@@ -26,7 +26,7 @@ import type { CalendarEvent, FreeTimeSlot } from './types.js';
  * Format: id||title||start||end||allDay||location||notes||calendar
  */
 function parseEventOutput(output: string): CalendarEvent[] {
-  const lines = output.trim().split('\\n').filter(Boolean);
+  const lines = output.trim().split('\n').filter(Boolean);
   const events: CalendarEvent[] = [];
 
   for (const line of lines) {
@@ -55,7 +55,7 @@ function parseEventOutput(output: string): CalendarEvent[] {
  * Format: start||end||durationMinutes
  */
 function parseFreeTimeOutput(output: string): FreeTimeSlot[] {
-  const lines = output.trim().split('\\n').filter(Boolean);
+  const lines = output.trim().split('\n').filter(Boolean);
   const slots: FreeTimeSlot[] = [];
 
   for (const line of lines) {

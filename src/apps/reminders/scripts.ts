@@ -54,6 +54,42 @@ end tell
 }
 
 /**
+ * Helper to generate the batch property fetch + assembly block for a single list.
+ * Uses inline batch property access to avoid 'repeat with r in reminders' which
+ * hangs when osascript is launched from Node.js child_process.
+ */
+function generateBatchFetchBlock(
+  listRef: string,
+  listNameExpr: string,
+  completedFilter: string,
+  indent: string
+): string {
+  const filter = completedFilter ? ` ${completedFilter}` : '';
+  const remRef = `reminders of ${listRef}${filter}`;
+  return `${indent}set c to count of (${remRef})
+${indent}if c > 0 then
+${indent}    set theIds to id of ${remRef}
+${indent}    set theNames to name of ${remRef}
+${indent}    set theCompleted to completed of ${remRef}
+${indent}    set thePriorities to priority of ${remRef}
+${indent}    set theFlagged to flagged of ${remRef}
+${indent}    set theBodies to body of ${remRef}
+${indent}    set theDueDates to due date of ${remRef}
+${indent}    set listName to ${listNameExpr}
+${indent}    repeat with j from 1 to c
+${indent}        set reminderDueDate to ""
+${indent}        set d to item j of theDueDates
+${indent}        if d is not missing value then
+${indent}            set reminderDueDate to short date string of d & " " & time string of d
+${indent}        end if
+${indent}        set reminderNotes to item j of theBodies
+${indent}        if reminderNotes is missing value then set reminderNotes to ""
+${indent}        set end of outputList to (item j of theIds) & "||" & (item j of theNames) & "||" & (item j of theCompleted) & "||" & (item j of thePriorities) & "||" & (item j of theFlagged) & "||" & reminderNotes & "||" & reminderDueDate & "||" & listName
+${indent}    end repeat
+${indent}end if`;
+}
+
+/**
  * Generates script to list reminders
  */
 export function generateListRemindersScript(params: ListRemindersParams): string {
@@ -63,70 +99,43 @@ export function generateListRemindersScript(params: ListRemindersParams): string
 
   if (params.list) {
     const sanitizedList = escapeAppleScriptString(params.list);
+    const fetchBlock = generateBatchFetchBlock(
+      `targetList`,
+      'name of targetList',
+      completedFilter,
+      '    '
+    );
     script = `
 tell application "Reminders"
     set targetList to list "${sanitizedList}"
-    set allReminders to reminders of targetList ${completedFilter}
-    set output to ""
-
-    repeat with r in allReminders
-        set reminderId to id of r
-        set reminderName to name of r
-        set reminderCompleted to completed of r
-        set reminderPriority to priority of r
-        set reminderFlagged to flagged of r
-
-        set reminderNotes to ""
-        try
-            set reminderNotes to body of r
-        end try
-
-        set reminderDueDate to ""
-        try
-            if due date of r is not missing value then
-                set reminderDueDate to due date of r as string
-            end if
-        end try
-
-        set output to output & reminderId & "||" & reminderName & "||" & reminderCompleted & "||" & reminderPriority & "||" & reminderFlagged & "||" & reminderNotes & "||" & reminderDueDate & "||" & name of targetList & "\\n"
-    end repeat
-
-    return output
+    set outputList to {}
+${fetchBlock}
+    set AppleScript's text item delimiters to "\\n"
+    set outputText to outputList as text
+    set AppleScript's text item delimiters to ""
+    return outputText
 end tell
     `;
   } else {
+    const fetchBlock = generateBatchFetchBlock(
+      'lst',
+      'name of lst',
+      completedFilter,
+      '        '
+    );
     script = `
 tell application "Reminders"
     set allLists to lists
-    set output to ""
-
-    repeat with lst in allLists
-        set allReminders to reminders of lst ${completedFilter}
-
-        repeat with r in allReminders
-            set reminderId to id of r
-            set reminderName to name of r
-            set reminderCompleted to completed of r
-            set reminderPriority to priority of r
-            set reminderFlagged to flagged of r
-
-            set reminderNotes to ""
-            try
-                set reminderNotes to body of r
-            end try
-
-            set reminderDueDate to ""
-            try
-                if due date of r is not missing value then
-                    set reminderDueDate to due date of r as string
-                end if
-            end try
-
-            set output to output & reminderId & "||" & reminderName & "||" & reminderCompleted & "||" & reminderPriority & "||" & reminderFlagged & "||" & reminderNotes & "||" & reminderDueDate & "||" & name of lst & "\\n"
-        end repeat
+    set outputList to {}
+    set listCount to count of allLists
+    repeat with i from 1 to listCount
+        set lst to item i of allLists
+${fetchBlock}
     end repeat
-
-    return output
+    set AppleScript's text item delimiters to "\\n"
+    set outputText to outputList as text
+    set AppleScript's text item delimiters to ""
+    return outputText
 end tell
     `;
   }
@@ -172,23 +181,20 @@ end tell
       return `
 tell application "Reminders"
     set allLists to lists
-    set found to false
+    set listCount to count of allLists
 
-    repeat with lst in allLists
+    repeat with i from 1 to listCount
+        set lst to item i of allLists
         set matchingReminders to (reminders of lst whose name is "${sanitizedTitle}" and completed is false)
 
         if (count of matchingReminders) > 0 then
             set targetReminder to item 1 of matchingReminders
             set completed of targetReminder to true
-            set found to true
             return "Completed: " & name of targetReminder & " in " & name of lst
-            exit repeat
         end if
     end repeat
 
-    if not found then
-        error "No incomplete reminder found with title: ${sanitizedTitle}"
-    end if
+    error "No incomplete reminder found with title: ${sanitizedTitle}"
 end tell
       `.trim();
     }
@@ -196,84 +202,97 @@ end tell
 }
 
 /**
+ * Helper to generate a search block for a single list using batch property access.
+ * Fetches names and bodies in batch, filters by query match using index-based loop,
+ * then fetches remaining properties for matching reminders.
+ */
+function generateSearchBlock(
+  listRef: string,
+  listNameExpr: string,
+  sanitizedQuery: string,
+  completedFilter: string,
+  indent: string
+): string {
+  // For search, we need to fetch names/bodies to check matches, then get full details for matches.
+  // We use 'whose name contains' filter when possible to reduce the dataset from AppleScript side.
+  // Since body search can't be done via 'whose', we fetch all and filter in the loop.
+  const filter = completedFilter ? ` ${completedFilter}` : '';
+  const remRef = `reminders of ${listRef}${filter}`;
+  return `${indent}set c to count of (${remRef})
+${indent}if c > 0 then
+${indent}    set theIds to id of ${remRef}
+${indent}    set theNames to name of ${remRef}
+${indent}    set theCompleted to completed of ${remRef}
+${indent}    set thePriorities to priority of ${remRef}
+${indent}    set theFlagged to flagged of ${remRef}
+${indent}    set theBodies to body of ${remRef}
+${indent}    set theDueDates to due date of ${remRef}
+${indent}    set listName to ${listNameExpr}
+${indent}    repeat with j from 1 to c
+${indent}        set reminderName to item j of theNames
+${indent}        set reminderNotes to item j of theBodies
+${indent}        if reminderNotes is missing value then set reminderNotes to ""
+${indent}        if (reminderName contains "${sanitizedQuery}" or reminderNotes contains "${sanitizedQuery}") then
+${indent}            set reminderDueDate to ""
+${indent}            set d to item j of theDueDates
+${indent}            if d is not missing value then
+${indent}                set reminderDueDate to short date string of d & " " & time string of d
+${indent}            end if
+${indent}            set end of outputList to (item j of theIds) & "||" & reminderName & "||" & (item j of theCompleted) & "||" & (item j of thePriorities) & "||" & (item j of theFlagged) & "||" & reminderNotes & "||" & reminderDueDate & "||" & listName
+${indent}        end if
+${indent}    end repeat
+${indent}end if`;
+}
+
+/**
  * Generates script to search reminders
  */
 export function generateSearchRemindersScript(params: SearchRemindersParams): string {
   const sanitizedQuery = escapeAppleScriptString(params.query);
-  const completedFilter = params.includeCompleted ? '' : 'and completed is false';
+  // For search, we apply the completed filter at the query level (not as an additional condition)
+  const completedFilter = params.includeCompleted ? '' : 'whose completed is false';
 
   if (params.list) {
     const sanitizedList = escapeAppleScriptString(params.list);
+    const searchBlock = generateSearchBlock(
+      'targetList',
+      'name of targetList',
+      sanitizedQuery,
+      completedFilter,
+      '    '
+    );
     return `
 tell application "Reminders"
     set targetList to list "${sanitizedList}"
-    set allReminders to reminders of targetList
-    set output to ""
-
-    repeat with r in allReminders
-        set reminderName to name of r
-        set reminderNotes to ""
-        try
-            set reminderNotes to body of r
-        end try
-
-        -- Check if query appears in name or notes
-        if (reminderName contains "${sanitizedQuery}" or reminderNotes contains "${sanitizedQuery}") ${completedFilter} then
-            set reminderId to id of r
-            set reminderCompleted to completed of r
-            set reminderPriority to priority of r
-            set reminderFlagged to flagged of r
-
-            set reminderDueDate to ""
-            try
-                if due date of r is not missing value then
-                    set reminderDueDate to due date of r as string
-                end if
-            end try
-
-            set output to output & reminderId & "||" & reminderName & "||" & reminderCompleted & "||" & reminderPriority & "||" & reminderFlagged & "||" & reminderNotes & "||" & reminderDueDate & "||" & name of targetList & "\\n"
-        end if
-    end repeat
-
-    return output
+    set outputList to {}
+${searchBlock}
+    set AppleScript's text item delimiters to "\\n"
+    set outputText to outputList as text
+    set AppleScript's text item delimiters to ""
+    return outputText
 end tell
     `.trim();
   } else {
+    const searchBlock = generateSearchBlock(
+      'lst',
+      'name of lst',
+      sanitizedQuery,
+      completedFilter,
+      '        '
+    );
     return `
 tell application "Reminders"
     set allLists to lists
-    set output to ""
-
-    repeat with lst in allLists
-        set allReminders to reminders of lst
-
-        repeat with r in allReminders
-            set reminderName to name of r
-            set reminderNotes to ""
-            try
-                set reminderNotes to body of r
-            end try
-
-            -- Check if query appears in name or notes
-            if (reminderName contains "${sanitizedQuery}" or reminderNotes contains "${sanitizedQuery}") ${completedFilter} then
-                set reminderId to id of r
-                set reminderCompleted to completed of r
-                set reminderPriority to priority of r
-                set reminderFlagged to flagged of r
-
-                set reminderDueDate to ""
-                try
-                    if due date of r is not missing value then
-                        set reminderDueDate to due date of r as string
-                    end if
-                end try
-
-                set output to output & reminderId & "||" & reminderName & "||" & reminderCompleted & "||" & reminderPriority & "||" & reminderFlagged & "||" & reminderNotes & "||" & reminderDueDate & "||" & name of lst & "\\n"
-            end if
-        end repeat
+    set outputList to {}
+    set listCount to count of allLists
+    repeat with i from 1 to listCount
+        set lst to item i of allLists
+${searchBlock}
     end repeat
-
-    return output
+    set AppleScript's text item delimiters to "\\n"
+    set outputText to outputList as text
+    set AppleScript's text item delimiters to ""
+    return outputText
 end tell
     `.trim();
   }

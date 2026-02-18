@@ -73,24 +73,21 @@ end tell
       return `
 tell application "Notes"
     set allFolders to folders
-    set found to false
+    set folderCount to count of allFolders
 
-    repeat with fld in allFolders
+    repeat with i from 1 to folderCount
+        set fld to item i of allFolders
         set matchingNotes to (notes of fld whose name is "${sanitizedTitle}")
 
         if (count of matchingNotes) > 0 then
             set targetNote to item 1 of matchingNotes
             set currentBody to body of targetNote
             set body of targetNote to currentBody & "<div>${sanitizedContent}</div>"
-            set found to true
             return id of targetNote & "|" & name of targetNote
-            exit repeat
         end if
     end repeat
 
-    if not found then
-        error "No note found with title: ${sanitizedTitle}"
-    end if
+    error "No note found with title: ${sanitizedTitle}"
 end tell
       `.trim();
     }
@@ -109,77 +106,99 @@ export function generateSearchNotesScript(params: SearchNotesParams): string {
     return `
 tell application "Notes"
     set targetFolder to folder "${sanitizedFolder}"
-    set allNotes to notes of targetFolder
-    set output to ""
+    set folderName to name of targetFolder
+    set c to count of notes of targetFolder
+    set outputList to {}
 
-    repeat with n in allNotes
-        set noteName to name of n
-        set noteBody to body of n
+    if c > 0 then
+        set theIds to id of notes of targetFolder
+        set theNames to name of notes of targetFolder
+        set theBodies to body of notes of targetFolder
+        set theCreated to creation date of notes of targetFolder
+        set theModified to modification date of notes of targetFolder
 
-        -- Check if query appears in name or body
-        if (noteName contains "${sanitizedQuery}" or noteBody contains "${sanitizedQuery}") then
-            set noteId to id of n
-            set noteCreated to ""
-            try
-                set noteCreated to creation date of n as string
-            end try
+        repeat with j from 1 to c
+            set noteName to item j of theNames
+            set noteBody to item j of theBodies
 
-            set noteModified to ""
-            try
-                set noteModified to modification date of n as string
-            end try
+            -- Check if query appears in name or body
+            if (noteName contains "${sanitizedQuery}" or noteBody contains "${sanitizedQuery}") then
+                set noteCreated to ""
+                try
+                    set noteCreated to short date string of (item j of theCreated) & " " & time string of (item j of theCreated)
+                end try
+                set noteModified to ""
+                try
+                    set noteModified to short date string of (item j of theModified) & " " & time string of (item j of theModified)
+                end try
 
-            -- Get excerpt (first 200 chars of body, stripped of HTML)
-            set excerpt to text 1 thru (count of noteBody) of noteBody
-            if (count of excerpt) > 200 then
-                set excerpt to text 1 thru 200 of excerpt
+                -- Get excerpt (first 200 chars of body)
+                set excerpt to noteBody
+                if (count of excerpt) > 200 then
+                    set excerpt to text 1 thru 200 of excerpt
+                end if
+
+                set end of outputList to (item j of theIds) & "||" & noteName & "||" & folderName & "||" & excerpt & "||" & noteCreated & "||" & noteModified
             end if
+        end repeat
+    end if
 
-            set output to output & noteId & "||" & noteName & "||" & name of targetFolder & "||" & excerpt & "||" & noteCreated & "||" & noteModified & "\\n"
-        end if
-    end repeat
-
-    return output
+    set AppleScript's text item delimiters to "\\n"
+    set outputText to outputList as text
+    set AppleScript's text item delimiters to ""
+    return outputText
 end tell
     `.trim();
   } else {
     return `
 tell application "Notes"
     set allFolders to folders
-    set output to ""
+    set outputList to {}
+    set folderCount to count of allFolders
 
-    repeat with fld in allFolders
-        set allNotes to notes of fld
+    repeat with i from 1 to folderCount
+        set fld to item i of allFolders
+        set folderName to name of fld
+        set c to count of notes of fld
 
-        repeat with n in allNotes
-            set noteName to name of n
-            set noteBody to body of n
+        if c > 0 then
+            set theIds to id of notes of fld
+            set theNames to name of notes of fld
+            set theBodies to body of notes of fld
+            set theCreated to creation date of notes of fld
+            set theModified to modification date of notes of fld
 
-            -- Check if query appears in name or body
-            if (noteName contains "${sanitizedQuery}" or noteBody contains "${sanitizedQuery}") then
-                set noteId to id of n
-                set noteCreated to ""
-                try
-                    set noteCreated to creation date of n as string
-                end try
+            repeat with j from 1 to c
+                set noteName to item j of theNames
+                set noteBody to item j of theBodies
 
-                set noteModified to ""
-                try
-                    set noteModified to modification date of n as string
-                end try
+                -- Check if query appears in name or body
+                if (noteName contains "${sanitizedQuery}" or noteBody contains "${sanitizedQuery}") then
+                    set noteCreated to ""
+                    try
+                        set noteCreated to short date string of (item j of theCreated) & " " & time string of (item j of theCreated)
+                    end try
+                    set noteModified to ""
+                    try
+                        set noteModified to short date string of (item j of theModified) & " " & time string of (item j of theModified)
+                    end try
 
-                -- Get excerpt (first 200 chars of body, stripped of HTML)
-                set excerpt to text 1 thru (count of noteBody) of noteBody
-                if (count of excerpt) > 200 then
-                    set excerpt to text 1 thru 200 of excerpt
+                    -- Get excerpt (first 200 chars of body)
+                    set excerpt to noteBody
+                    if (count of excerpt) > 200 then
+                        set excerpt to text 1 thru 200 of excerpt
+                    end if
+
+                    set end of outputList to (item j of theIds) & "||" & noteName & "||" & folderName & "||" & excerpt & "||" & noteCreated & "||" & noteModified
                 end if
-
-                set output to output & noteId & "||" & noteName & "||" & name of fld & "||" & excerpt & "||" & noteCreated & "||" & noteModified & "\\n"
-            end if
-        end repeat
+            end repeat
+        end if
     end repeat
 
-    return output
+    set AppleScript's text item delimiters to "\\n"
+    set outputText to outputList as text
+    set AppleScript's text item delimiters to ""
+    return outputText
 end tell
     `.trim();
   }

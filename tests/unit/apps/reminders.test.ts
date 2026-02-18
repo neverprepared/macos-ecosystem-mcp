@@ -95,7 +95,7 @@ describe('Reminders Script Generation', () => {
       });
 
       expect(script).toContain('set allLists to lists');
-      expect(script).toContain('repeat with lst in allLists');
+      expect(script).toContain('repeat with i from 1 to listCount');
     });
   });
 
@@ -127,7 +127,7 @@ describe('Reminders Script Generation', () => {
       });
 
       expect(script).toContain('set allLists to lists');
-      expect(script).toContain('repeat with lst in allLists');
+      expect(script).toContain('repeat with i from 1 to listCount');
     });
   });
 
@@ -141,7 +141,7 @@ describe('Reminders Script Generation', () => {
 
       expect(script).toContain('tell application "Reminders"');
       expect(script).toContain('contains "meeting"');
-      expect(script).toContain('and completed is false');
+      expect(script).toContain('whose completed is false');
     });
 
     it('should search specific list when provided', () => {
