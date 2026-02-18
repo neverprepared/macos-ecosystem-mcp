@@ -34,21 +34,35 @@ Unlike raw AppleScript execution servers (which are dangerous due to arbitrary c
 
 ## Installation
 
-### Prerequisites
+### Option 1: Binary Installation (Recommended)
 
-- macOS 10.15 or later
-- Node.js 18+
-- pnpm (recommended) or npm
-
-### Install Dependencies
+**No Node.js required!** Download a pre-built binary from [GitHub Releases](https://github.com/neverprepared/macos-ecosystem-mcp/releases):
 
 ```bash
-pnpm install
+# For Apple Silicon (M1/M2/M3)
+curl -L https://github.com/neverprepared/macos-ecosystem-mcp/releases/latest/download/macos-mcp-arm64 -o macos-mcp
+chmod +x macos-mcp
+sudo mv macos-mcp /usr/local/bin/
+
+# For Intel Macs
+curl -L https://github.com/neverprepared/macos-ecosystem-mcp/releases/latest/download/macos-mcp-x86_64 -o macos-mcp
+chmod +x macos-mcp
+sudo mv macos-mcp /usr/local/bin/
 ```
 
-### Build
+See [BINARY_INSTALL.md](BINARY_INSTALL.md) for detailed instructions.
+
+### Option 2: Install from Source
+
+**Prerequisites:**
+- macOS 10.15 or later
+- Node.js 18+ or Bun
+- pnpm (recommended) or npm
 
 ```bash
+git clone https://github.com/neverprepared/macos-ecosystem-mcp.git
+cd macos-ecosystem-mcp
+pnpm install
 pnpm build
 ```
 
@@ -56,28 +70,27 @@ pnpm build
 
 ### Option 1: Claude Code (CLI)
 
-Add to your project's `.claude/mcp.json` or global `~/.claude/mcp.json`:
+**If using binary installation:**
+
+Add to your global `~/.claude/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "macos-ecosystem": {
-      "command": "node",
-      "args": ["/absolute/path/to/macos-ecosystem-mcp/dist/index.js"],
-      "disabled": false
+      "command": "/usr/local/bin/macos-mcp"
     }
   }
 }
 ```
 
-Or use the start script:
+**If using source installation:**
 
 ```json
 {
   "mcpServers": {
     "macos-ecosystem": {
-      "command": "/absolute/path/to/macos-ecosystem-mcp/start.sh",
-      "disabled": false
+      "command": "/absolute/path/to/macos-ecosystem-mcp/start.sh"
     }
   }
 }
