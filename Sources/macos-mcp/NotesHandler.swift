@@ -275,11 +275,3 @@ private func notesError(_ message: String) -> NSError {
             userInfo: [NSLocalizedDescriptionKey: message])
 }
 
-private extension Optional where Wrapped == Value {
-    var asInt: Int? {
-        switch self {
-        case .some(let v): return v.asInt
-        case .none:        return nil
-        }
-    }
-}
