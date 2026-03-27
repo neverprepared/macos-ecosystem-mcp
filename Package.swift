@@ -6,6 +6,12 @@ let package = Package(
     platforms: [
         .macOS(.v13)
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/modelcontextprotocol/swift-sdk.git",
+            from: "0.9.0"
+        )
+    ],
     targets: [
         .executableTarget(
             name: "macos-mcp",
@@ -13,12 +19,6 @@ let package = Package(
                 .product(name: "MCP", package: "swift-sdk")
             ],
             path: "Sources/macos-mcp"
-        )
-    ],
-    dependencies: [
-        .package(
-            url: "https://github.com/modelcontextprotocol/swift-sdk.git",
-            from: "0.9.0"
         )
     ]
 )
