@@ -1,5 +1,5 @@
 class MacosEcosystemMcp < Formula
-  desc "MCP server for macOS Reminders, Calendar, and Notes via AppleScript"
+  desc "MCP server for macOS Reminders, Calendar, and Notes via native EventKit"
   homepage "https://github.com/neverprepared/macos-ecosystem-mcp"
   version "0.2.0"
   license "MIT"
