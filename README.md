@@ -1,75 +1,72 @@
 # macOS Ecosystem MCP Server
 
-A secure, semantic Model Context Protocol (MCP) server that provides Claude with safe access to macOS productivity applications: Reminders, Calendar, and Notes.
+A fast, native Model Context Protocol (MCP) server for Claude that provides direct access to macOS productivity apps: **Reminders**, **Calendar**, and **Notes**.
 
-## Why This Server?
+## Why This Rewrite?
 
-Unlike raw AppleScript execution servers (which are dangerous due to arbitrary code execution), this server provides:
+The original Node.js/TypeScript server shelled out to `osascript` for **every** tool call — adding 300–800 ms of process-startup overhead each time.
 
-- ✅ **App-specific semantic tools** (e.g., `reminders_add`, `calendar_create_event`)
-- ✅ **Multi-layer security validation** (Zod schemas + AppleScript validator)
-- ✅ **Template-based script generation** (no string concatenation)
-- ✅ **Input sanitization** and validation at every layer
-- ✅ **Clear, discoverable tool interfaces** for LLMs
+This Swift rewrite:
+- Uses **EventKit** natively for Reminders and Calendar (no subprocess)
+- Only shells out to `osascript` for Notes (Notes.framework is private)
+- Compiles to a **single self-contained binary** — no Node.js runtime required
+- Speaks the MCP stdio protocol directly via the [official Swift SDK](https://github.com/modelcontextprotocol/swift-sdk)
 
 ## Features
 
-### 🗓️ Reminders (4 tools)
-- `reminders_add` - Create reminders with title, notes, due date, priority
-- `reminders_list` - List reminders with filtering by list and completion status
-- `reminders_complete` - Mark reminders as completed
-- `reminders_search` - Search reminders by keyword
+### 🗓️ Reminders (4 tools — EventKit)
+- `reminders_add` — Create reminders with title, notes, due date, priority
+- `reminders_list` — List reminders, filter by list and completion status
+- `reminders_complete` — Mark a reminder as completed (by ID or title)
+- `reminders_search` — Search reminders by keyword
 
-### 📅 Calendar (5 tools)
-- `calendar_create_event` - Create events with full details (location, notes, alerts)
-- `calendar_list_events` - List events within a date range
-- `calendar_find_free_time` - Find available time slots for scheduling
-- `calendar_update_event` - Modify existing events
-- `calendar_delete_event` - Delete events
+### 📅 Calendar (5 tools — EventKit)
+- `calendar_create_event` — Create events with location, notes, alerts
+- `calendar_list_events` — List events within a date range
+- `calendar_find_free_time` — Find available time slots
+- `calendar_update_event` — Modify existing events
+- `calendar_delete_event` — Delete events
 
-### 📝 Notes (3 tools)
-- `notes_create` - Create notes with title and body (supports HTML)
-- `notes_append` - Append content to existing notes
-- `notes_search` - Search notes by keyword
+### 📝 Notes (3 tools — osascript)
+- `notes_create` — Create notes with title and body (HTML supported)
+- `notes_append` — Append content to existing notes
+- `notes_search` — Search notes by keyword
 
-## Installation
+## Requirements
 
-### Option 1: Binary Installation (Recommended)
+- macOS 13 Ventura or later
+- Xcode 15+ / Swift 5.9+ (build only)
+- Reminders, Calendar, and Notes access granted in **System Settings → Privacy & Security**
 
-**No Node.js required!** Download a pre-built binary from [GitHub Releases](https://github.com/neverprepared/macos-ecosystem-mcp/releases):
-
-```bash
-# For Apple Silicon (M1/M2/M3/M4)
-curl -L https://github.com/neverprepared/macos-ecosystem-mcp/releases/latest/download/macos-mcp-arm64 -o macos-mcp
-chmod +x macos-mcp
-sudo mv macos-mcp /usr/local/bin/
-```
-
-> **Note**: Intel Macs can run via Rosetta 2 or install from source.
-
-See [BINARY_INSTALL.md](BINARY_INSTALL.md) for detailed instructions.
-
-### Option 2: Install from Source
-
-**Prerequisites:**
-- macOS 10.15 or later
-- Node.js 18+ or Bun
-- pnpm (recommended) or npm
+## Build from Source
 
 ```bash
 git clone https://github.com/neverprepared/macos-ecosystem-mcp.git
 cd macos-ecosystem-mcp
-pnpm install
-pnpm build
+swift build -c release
 ```
 
-## Configuration
+The binary is placed at:
+```
+.build/release/macos-mcp
+```
 
-### Option 1: Claude Code (CLI)
+Install it system-wide:
+```bash
+sudo cp .build/release/macos-mcp /usr/local/bin/macos-mcp
+```
 
-**If using binary installation:**
+## macOS Permissions
 
-Add to your global `~/.claude/mcp.json`:
+The first time the binary runs it will request access. You can also grant it in advance:
+
+1. **System Settings → Privacy & Security → Reminders** — add `macos-mcp`
+2. **System Settings → Privacy & Security → Calendars** — add `macos-mcp`
+3. **System Settings → Privacy & Security → Automation → Notes** — add `macos-mcp`
+
+## Claude Desktop Configuration
+
+Add this to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -81,185 +78,135 @@ Add to your global `~/.claude/mcp.json`:
 }
 ```
 
-**If using source installation:**
+Or using the local build path:
 
 ```json
 {
   "mcpServers": {
     "macos-ecosystem": {
-      "command": "/absolute/path/to/macos-ecosystem-mcp/start.sh"
+      "command": "/path/to/macos-ecosystem-mcp/.build/release/macos-mcp"
     }
   }
 }
 ```
 
-**Verify the server is loaded:**
-```bash
-claude mcp list
-# Should show "macos-ecosystem" in the list
-```
+Restart Claude Desktop after editing the config.
 
-### Option 2: Claude Desktop
+## Tool Reference
 
-Add to your `~/.config/claude/claude_desktop_config.json`:
+### reminders_add
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| title | string | ✓ | — | Reminder title |
+| list | string | | "Reminders" | List name |
+| notes | string | | — | Body text |
+| dueDate | string | | — | ISO 8601 date-time |
+| priority | none\|low\|medium\|high | | "none" | Priority |
 
-```json
-{
-  "mcpServers": {
-    "macos-ecosystem": {
-      "command": "/Users/YOUR_USERNAME/path/to/macos-ecosystem-mcp/start.sh"
-    }
-  }
-}
-```
+### reminders_list
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| list | string | | — | Filter by list |
+| includeCompleted | boolean | | false | Include completed |
+| limit | integer | | 50 | Max results (1–100) |
 
-Replace `YOUR_USERNAME` and adjust the path to where you cloned this repository.
+### reminders_complete
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| reminderId | string | (one of) | EventKit calendarItemIdentifier |
+| title | string | (one of) | Reminder title |
+| list | string | | Narrow search to list |
 
-### Environment Variables
+### reminders_search
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| query | string | ✓ | — | Search keyword |
+| list | string | | — | Restrict to list |
+| includeCompleted | boolean | | false | Include completed |
+| limit | integer | | 20 | Max results |
 
-Copy `.env.example` to `.env` and customize:
+### calendar_create_event
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| title | string | ✓ | — | Event title |
+| startDate | string | ✓ | — | ISO 8601 start |
+| endDate | string | ✓ | — | ISO 8601 end |
+| calendar | string | | system default | Calendar name |
+| location | string | | — | Location |
+| notes | string | | — | Description |
+| allDay | boolean | | false | All-day event |
+| alerts | integer[] | | — | Alert offsets in minutes |
 
-```bash
-cp .env.example .env
-```
+### calendar_list_events
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| startDate | string | ✓ | — | ISO 8601 range start |
+| endDate | string | ✓ | — | ISO 8601 range end |
+| calendar | string | | — | Filter by calendar |
+| limit | integer | | 50 | Max results |
 
-Available options:
-- `LOG_LEVEL` - Logging verbosity: `debug`, `info`, `warn`, `error` (default: `info`)
-- `SCRIPT_TIMEOUT` - Script execution timeout in milliseconds (default: `30000`)
-- `ENABLE_SECURITY_VALIDATION` - Enable security checks (default: `true`)
+### calendar_find_free_time
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| date | string | ✓ | — | ISO 8601 day to search |
+| duration | integer | ✓ | — | Required slot (15–480 min) |
+| workingHoursStart | integer | | 9 | Start hour (0–23) |
+| workingHoursEnd | integer | | 17 | End hour (0–23) |
+| calendar | string | | — | Restrict to calendar |
 
-## macOS Permissions
+### calendar_update_event
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| eventId | string | ✓ | EKEvent eventIdentifier |
+| title | string | | New title |
+| startDate | string | | New ISO 8601 start |
+| endDate | string | | New ISO 8601 end |
+| location | string | | New location |
+| notes | string | | New description |
 
-On first use, macOS will prompt you to grant automation permissions. You need to allow this server to control:
+### calendar_delete_event
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| eventId | string | (one of) | EKEvent eventIdentifier |
+| title | string | (one of) | Event title |
+| date | string | | ISO 8601 date to narrow search |
 
-- **Reminders**
-- **Calendar**
-- **Notes**
+### notes_create
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| title | string | ✓ | — | Note title |
+| body | string | ✓ | — | Note body |
+| folder | string | | "Notes" | Folder name |
 
-Navigate to: **System Settings > Privacy & Security > Automation**
+### notes_append
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| noteId | string | (one of) | AppleScript note ID |
+| title | string | (one of) | Note title |
+| folder | string | | Narrow search |
+| content | string | ✓ | Content to append |
 
-## Usage Examples
-
-### Create a Reminder
-
-```
-Create a reminder "Review PR #123" in my Work list, due tomorrow at 2pm, high priority
-```
-
-### Find Free Time
-
-```
-Find me a 30-minute slot tomorrow between 9am and 5pm
-```
-
-### Create a Note
-
-```
-Create a note titled "Meeting Notes - Q1 Planning" with the following content: [your content]
-```
-
-### Search Reminders
-
-```
-Find all reminders related to "project alpha"
-```
-
-## Development
-
-### Run Tests
-
-```bash
-pnpm test              # Run once
-pnpm test:watch        # Watch mode
-pnpm test:coverage     # With coverage report
-```
-
-### Type Checking
-
-```bash
-pnpm typecheck
-```
-
-### Development Mode
-
-```bash
-pnpm dev
-```
-
-## Security
-
-This server implements **defense-in-depth security**:
-
-1. **Input Validation** - Zod schemas validate all inputs
-2. **Template-Based Generation** - No string concatenation of user input
-3. **AppleScript Validator** - Blocks forbidden patterns before execution
-4. **App Whitelist** - Only approved apps can be targeted
-5. **Timeout Protection** - Scripts cannot run indefinitely
-
-See [docs/SECURITY.md](docs/SECURITY.md) for detailed security architecture.
+### notes_search
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| query | string | ✓ | — | Search keyword |
+| folder | string | | — | Restrict to folder |
+| limit | integer | | 20 | Max results |
 
 ## Architecture
 
-- **TypeScript** with strict type checking
-- **Zod** for runtime validation
-- **date-fns** for date handling
-- **run-applescript** for AppleScript execution
-- **Vitest** for testing
+```
+Sources/macos-mcp/
+├── App.swift              # @main entry — MCP server setup and tool dispatcher
+├── ToolDefinitions.swift  # JSON Schema definitions for all 12 tools
+├── EventKitManager.swift  # Swift actor wrapping EKEventStore (reminders + calendar)
+└── NotesHandler.swift     # osascript runner for Notes operations
+```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for implementation details.
+## Notes on Flagged Reminders
 
-## Roadmap
-
-### Phase 2 - Communication
-- Mail (send, search, manage inbox)
-- Messages (iMessage/SMS)
-
-### Phase 3 - Automation & Browser
-- Shortcuts (list, run programmatically)
-- Safari (tab management, navigation)
-
-### Phase 4 - Media & System
-- Music (playback control, playlists)
-- Photos (albums, search, export)
+EventKit does not expose the "flagged" status of reminders (it is a Reminders-app-specific attribute not in the EventKit API). The `flagged` parameter is accepted but silently ignored when creating reminders.
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass (`pnpm test`)
-5. Submit a pull request
-
-## Troubleshooting
-
-### Permission Errors
-
-If you see "Permission denied" errors:
-1. Go to **System Settings > Privacy & Security > Automation**
-2. Enable permissions for this tool to control Reminders/Calendar/Notes
-3. Restart Claude Desktop
-
-### Scripts Timing Out
-
-Increase `SCRIPT_TIMEOUT` in `.env`:
-```
-SCRIPT_TIMEOUT=60000  # 60 seconds
-```
-
-### Debug Logging
-
-Enable debug logs in `.env`:
-```
-LOG_LEVEL=debug
-```
-
-Logs are written to stderr and won't interfere with MCP communication.
-
-## Support
-
-For issues, questions, or feature requests, please open an issue on GitHub.
