@@ -37,6 +37,43 @@ jobs:
           ARCH=$(uname -m)
           mv bin/macos-mcp bin/macos-mcp-${ARCH}
 
+      - name: Import signing certificate
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          rm certificate.p12
+
+      - name: Sign binary
+        run: |
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            --identifier "com.neverprepared.macos-ecosystem-mcp" \
+            --timestamp \
+            bin/macos-mcp-arm64
+          codesign --verify --verbose bin/macos-mcp-arm64
+
+      - name: Notarize binary
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          zip bin/macos-mcp-arm64.zip bin/macos-mcp-arm64
+          xcrun notarytool submit bin/macos-mcp-arm64.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          rm bin/macos-mcp-arm64.zip
+
       - name: Calculate checksum
         id: checksum
         run: |
