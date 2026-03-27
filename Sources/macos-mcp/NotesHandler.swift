@@ -250,6 +250,71 @@ end tell
         }
     }
 
+    static func deleteNote(args: [String: Value]) async throws -> String {
+        let noteIdArg  = args["noteId"]?.stringValue
+        let titleArg   = args["title"]?.stringValue
+        let folderArg  = args["folder"]?.stringValue
+
+        guard noteIdArg != nil || titleArg != nil else {
+            throw notesError("Either 'noteId' or 'title' must be provided")
+        }
+
+        let script: String
+        if let noteId = noteIdArg {
+            let safeId = escapeAppleScript(noteId)
+            script = """
+tell application "Notes"
+    set targetNote to note id "\(safeId)"
+    set noteName to name of targetNote
+    delete targetNote
+    return noteName
+end tell
+"""
+        } else {
+            let safeTitle = escapeAppleScript(titleArg!)
+            if let folder = folderArg {
+                let safeFolder = escapeAppleScript(folder)
+                script = """
+tell application "Notes"
+    set targetFolder to folder "\(safeFolder)"
+    set found to false
+    repeat with n in notes of targetFolder
+        if name of n is "\(safeTitle)" then
+            delete n
+            set found to true
+            exit repeat
+        end if
+    end repeat
+    if not found then
+        error "No note found with title: \(safeTitle)"
+    end if
+    return "\(safeTitle)"
+end tell
+"""
+            } else {
+                script = """
+tell application "Notes"
+    set found to false
+    repeat with n in every note
+        if name of n is "\(safeTitle)" then
+            delete n
+            set found to true
+            exit repeat
+        end if
+    end repeat
+    if not found then
+        error "No note found with title: \(safeTitle)"
+    end if
+    return "\(safeTitle)"
+end tell
+"""
+            }
+        }
+
+        let result = try await runAppleScript(script)
+        return "✓ Deleted note \"\(result)\""
+    }
+
     // MARK: - String escaping
 
     /// Escapes a Swift string for safe embedding inside an AppleScript double-quoted string.

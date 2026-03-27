@@ -152,6 +152,88 @@ actor EventKitManager {
         return "✓ Completed: \"\(reminder.title ?? title)\" in \"\(reminder.calendar?.title ?? "?")\""
     }
 
+    func updateReminder(args: [String: Value]) async throws -> String {
+        let reminderId = args["reminderId"]?.stringValue
+        let titleArg   = args["title"]?.stringValue
+        let listArg    = args["list"]?.stringValue
+
+        guard reminderId != nil || titleArg != nil else {
+            throw ekError("Either 'reminderId' or 'title' must be provided")
+        }
+
+        let reminder: EKReminder
+        if let rid = reminderId {
+            guard let item = store.calendarItem(withIdentifier: rid) as? EKReminder else {
+                throw ekError("No reminder found with ID: \(rid)")
+            }
+            reminder = item
+        } else {
+            let lists = try reminderCalendars(named: listArg)
+            let pred  = store.predicateForReminders(in: lists)
+            let all   = await fetchReminders(matching: pred)
+            guard let match = all.first(where: { $0.title == titleArg }) else {
+                throw ekError("No reminder found with title: \"\(titleArg!)\"")
+            }
+            reminder = match
+        }
+
+        if let newTitle = args["newTitle"]?.stringValue, !newTitle.isEmpty {
+            reminder.title = newTitle
+        }
+        if let notes = args["notes"]?.stringValue {
+            reminder.notes = notes
+        }
+        if let priorityStr = args["priority"]?.stringValue {
+            reminder.priority = priorityValue(priorityStr)
+        }
+        if let dueDateStr = args["dueDate"]?.stringValue {
+            if dueDateStr == "" {
+                reminder.dueDateComponents = nil
+            } else if let date = parseISO8601(dueDateStr) {
+                var components = Calendar.current.dateComponents(
+                    [.year, .month, .day, .hour, .minute, .second], from: date)
+                components.timeZone = TimeZone.current
+                reminder.dueDateComponents = components
+            }
+        }
+        if let newList = args["newList"]?.stringValue {
+            let lists = store.calendars(for: .reminder).filter { $0.title == newList }
+            if let list = lists.first { reminder.calendar = list }
+        }
+
+        try store.save(reminder, commit: true)
+        return "✓ Updated reminder \"\(reminder.title ?? "?")\"\n  ID: \(reminder.calendarItemIdentifier)"
+    }
+
+    func deleteReminder(args: [String: Value]) async throws -> String {
+        let reminderId = args["reminderId"]?.stringValue
+        let titleArg   = args["title"]?.stringValue
+        let listArg    = args["list"]?.stringValue
+
+        guard reminderId != nil || titleArg != nil else {
+            throw ekError("Either 'reminderId' or 'title' must be provided")
+        }
+
+        if let rid = reminderId {
+            guard let item = store.calendarItem(withIdentifier: rid) as? EKReminder else {
+                throw ekError("No reminder found with ID: \(rid)")
+            }
+            let title = item.title ?? rid
+            try store.remove(item, commit: true)
+            return "✓ Deleted reminder \"\(title)\""
+        }
+
+        let lists = try reminderCalendars(named: listArg)
+        let pred  = store.predicateForReminders(in: lists)
+        let all   = await fetchReminders(matching: pred)
+        guard let reminder = all.first(where: { $0.title == titleArg }) else {
+            throw ekError("No reminder found with title: \"\(titleArg!)\"")
+        }
+        let title = reminder.title ?? titleArg!
+        try store.remove(reminder, commit: true)
+        return "✓ Deleted reminder \"\(title)\""
+    }
+
     func searchReminders(args: [String: Value]) async throws -> String {
         guard let query = args["query"]?.stringValue, !query.isEmpty else {
             throw ekError("'query' is required")

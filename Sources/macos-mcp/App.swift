@@ -28,7 +28,7 @@ struct MacOSMCPApp {
             await dispatch(params: params, ekManager: ekManager)
         }
 
-        log("All 12 tools registered, connecting stdio transport")
+        log("All 15 tools registered, connecting stdio transport")
 
         let transport = StdioTransport()
         try await server.start(transport: transport)
@@ -49,6 +49,10 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager) a
                 return try await ekManager.addReminder(args: params.arguments ?? [:])
             case "reminders_complete":
                 return try await ekManager.completeReminder(args: params.arguments ?? [:])
+            case "reminders_update":
+                return try await ekManager.updateReminder(args: params.arguments ?? [:])
+            case "reminders_delete":
+                return try await ekManager.deleteReminder(args: params.arguments ?? [:])
             case "reminders_search":
                 return try await ekManager.searchReminders(args: params.arguments ?? [:])
 
@@ -69,6 +73,8 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager) a
                 return try await NotesHandler.createNote(args: params.arguments ?? [:])
             case "notes_append":
                 return try await NotesHandler.appendNote(args: params.arguments ?? [:])
+            case "notes_delete":
+                return try await NotesHandler.deleteNote(args: params.arguments ?? [:])
             case "notes_search":
                 return try await NotesHandler.searchNotes(args: params.arguments ?? [:])
 

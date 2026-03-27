@@ -1,6 +1,6 @@
 import MCP
 
-/// All 12 tool definitions exposed by this server.
+/// All 15 tool definitions exposed by this server.
 /// Parameter names and types match the original TypeScript schemas exactly.
 let allTools: [Tool] = [
 
@@ -123,6 +123,73 @@ let allTools: [Tool] = [
                 ])
             ]),
             "required": .array([.string("query")])
+        ])
+    ),
+
+    Tool(
+        name: "reminders_update",
+        description: "Update an existing reminder's title, notes, due date, priority, or list.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "reminderId": .object([
+                    "type": .string("string"),
+                    "description": .string("The EventKit calendarItemIdentifier of the reminder (preferred).")
+                ]),
+                "title": .object([
+                    "type": .string("string"),
+                    "description": .string("Current title to look up when reminderId is absent.")
+                ]),
+                "list": .object([
+                    "type": .string("string"),
+                    "description": .string("Narrow the title search to a specific list.")
+                ]),
+                "newTitle": .object([
+                    "type": .string("string"),
+                    "description": .string("New title to set (1–500 chars).")
+                ]),
+                "notes": .object([
+                    "type": .string("string"),
+                    "description": .string("New notes to set (max 5000 chars).")
+                ]),
+                "dueDate": .object([
+                    "type": .string("string"),
+                    "description": .string("New ISO 8601 due date, e.g. '2025-06-15T18:00:00'. Pass empty string to clear.")
+                ]),
+                "priority": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("none"), .string("low"), .string("medium"), .string("high")]),
+                    "description": .string("New priority level.")
+                ]),
+                "newList": .object([
+                    "type": .string("string"),
+                    "description": .string("Move reminder to this list.")
+                ])
+            ]),
+            "required": .array([])
+        ])
+    ),
+
+    Tool(
+        name: "reminders_delete",
+        description: "Permanently delete a reminder. Identify by reminderId or title.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "reminderId": .object([
+                    "type": .string("string"),
+                    "description": .string("The EventKit calendarItemIdentifier of the reminder (preferred).")
+                ]),
+                "title": .object([
+                    "type": .string("string"),
+                    "description": .string("Title of the reminder to delete (used when reminderId is absent).")
+                ]),
+                "list": .object([
+                    "type": .string("string"),
+                    "description": .string("Narrow the title search to a specific list.")
+                ])
+            ]),
+            "required": .array([])
         ])
     ),
 
@@ -355,6 +422,29 @@ let allTools: [Tool] = [
                 ])
             ]),
             "required": .array([.string("content")])
+        ])
+    ),
+
+    Tool(
+        name: "notes_delete",
+        description: "Delete a note from the macOS Notes app (uses osascript). Identify by noteId or title.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "noteId": .object([
+                    "type": .string("string"),
+                    "description": .string("AppleScript note ID (preferred).")
+                ]),
+                "title": .object([
+                    "type": .string("string"),
+                    "description": .string("Title of the note to delete (used when noteId is absent).")
+                ]),
+                "folder": .object([
+                    "type": .string("string"),
+                    "description": .string("Narrow the title search to a specific folder.")
+                ])
+            ]),
+            "required": .array([])
         ])
     ),
 
