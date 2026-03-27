@@ -1,38 +1,35 @@
-# Dependencies
-node_modules/
-pnpm-lock.yaml
-package-lock.json
-yarn.lock
-
-# Build outputs
-dist/
-*.tsbuildinfo
-bin/
-
-# Environment variables
-.env
-.env.local
-
-# IDE
-.vscode/
-.idea/
+# Swift / SPM
+.build/
+*.o
+*.d
 *.swp
 *.swo
 *~
+.swiftpm/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.pbxuser
+*.perspectivev3
+*.xccheckout
+*.xcscmblueprint
 
 # macOS
 .DS_Store
 .AppleDouble
 .LSOverride
 
-# Testing
-coverage/
-.nyc_output/
+# Environment
+.env
+.env.local
 
 # Logs
 *.log
 logs/
 
-# Temporary files
+# Temporary
 *.tmp
 .temp/
