@@ -105,7 +105,7 @@ export async function handleCalendarTool(
           script,
           app: 'Calendar',
           operation: 'create_event',
-          timeout: 10000,
+          timeout: 45000,
         });
 
         const [, title, calendarName] = result.split('|');
@@ -154,7 +154,7 @@ export async function handleCalendarTool(
           script,
           app: 'Calendar',
           operation: 'list_events',
-          timeout: 15000,
+          timeout: 60000,
         });
 
         const events = parseEventOutput(result).slice(0, input.limit);
@@ -226,7 +226,7 @@ export async function handleCalendarTool(
           script,
           app: 'Calendar',
           operation: 'find_free_time',
-          timeout: 15000,
+          timeout: 60000,
         });
 
         const slots = parseFreeTimeOutput(result);
@@ -290,7 +290,7 @@ export async function handleCalendarTool(
           script,
           app: 'Calendar',
           operation: 'update_event',
-          timeout: 10000,
+          timeout: 45000,
         });
 
         return {
@@ -335,7 +335,7 @@ export async function handleCalendarTool(
           script,
           app: 'Calendar',
           operation: 'delete_event',
-          timeout: 10000,
+          timeout: 45000,
         });
 
         return {

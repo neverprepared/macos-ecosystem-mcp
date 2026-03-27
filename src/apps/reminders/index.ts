@@ -75,7 +75,7 @@ export async function handleRemindersTool(
           script,
           app: 'Reminders',
           operation: 'add',
-          timeout: 10000,
+          timeout: 45000,
         });
 
         // Parse result: id|title|listName
@@ -120,7 +120,7 @@ export async function handleRemindersTool(
           script,
           app: 'Reminders',
           operation: 'list',
-          timeout: 15000,
+          timeout: 60000,
         });
 
         const reminders = parseReminderOutput(result).slice(0, input.limit);
@@ -190,7 +190,7 @@ export async function handleRemindersTool(
           script,
           app: 'Reminders',
           operation: 'complete',
-          timeout: 10000,
+          timeout: 45000,
         });
 
         return {
@@ -233,7 +233,7 @@ export async function handleRemindersTool(
           script,
           app: 'Reminders',
           operation: 'search',
-          timeout: 15000,
+          timeout: 60000,
         });
 
         const reminders = parseReminderOutput(result).slice(0, input.limit);

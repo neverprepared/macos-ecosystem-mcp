@@ -81,7 +81,7 @@ export async function handleNotesTool(
           script,
           app: 'Notes',
           operation: 'create',
-          timeout: 10000,
+          timeout: 45000,
         });
 
         const [, title, folder] = result.split('|');
@@ -129,7 +129,7 @@ export async function handleNotesTool(
           script,
           app: 'Notes',
           operation: 'append',
-          timeout: 10000,
+          timeout: 45000,
         });
 
         const [, title] = result.split('|');
@@ -173,7 +173,7 @@ export async function handleNotesTool(
           script,
           app: 'Notes',
           operation: 'search',
-          timeout: 15000,
+          timeout: 60000,
         });
 
         const notes = parseNoteOutput(result).slice(0, input.limit);
