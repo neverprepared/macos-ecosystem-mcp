@@ -18,19 +18,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Run tests
-        run: bun test
-
       - name: Build binary
-        run: bun run build:binary
+        run: |
+          swift build -c release
+          mkdir -p bin
+          cp .build/release/macos-mcp bin/macos-mcp
 
       - name: Rename binary with architecture
         run: |
@@ -52,12 +44,13 @@ jobs:
 
       - name: Sign binary
         run: |
+          ARCH=$(uname -m)
           codesign --force --options runtime \
             --sign "Developer ID Application" \
             --identifier "com.neverprepared.macos-ecosystem-mcp" \
             --timestamp \
-            bin/macos-mcp-arm64
-          codesign --verify --verbose bin/macos-mcp-arm64
+            bin/macos-mcp-${ARCH}
+          codesign --verify --verbose bin/macos-mcp-${ARCH}
 
       - name: Notarize binary
         if: startsWith(github.ref, 'refs/tags/')
@@ -66,19 +59,22 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          zip bin/macos-mcp-arm64.zip bin/macos-mcp-arm64
-          xcrun notarytool submit bin/macos-mcp-arm64.zip \
+          ARCH=$(uname -m)
+          zip bin/macos-mcp-${ARCH}.zip bin/macos-mcp-${ARCH}
+          xcrun notarytool submit bin/macos-mcp-${ARCH}.zip \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_ID_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
             --wait
-          rm bin/macos-mcp-arm64.zip
+          rm bin/macos-mcp-${ARCH}.zip
 
       - name: Calculate checksum
         id: checksum
         run: |
-          SHA256=$(shasum -a 256 bin/macos-mcp-arm64 | awk '{print $1}')
-          echo "arm64=$SHA256" >> $GITHUB_OUTPUT
+          ARCH=$(uname -m)
+          SHA256=$(shasum -a 256 bin/macos-mcp-${ARCH} | awk '{print $1}')
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "arch=$ARCH" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -103,7 +99,7 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           sed -i '' \
             -e "s|version \".*\"|version \"$VERSION\"|" \
-            -e "s|sha256 \".*\"|sha256 \"${{ steps.checksum.outputs.arm64 }}\"|g" \
+            -e "s|sha256 \".*\"|sha256 \"${{ steps.checksum.outputs.sha256 }}\"|g" \
             Formula/macos-ecosystem-mcp.rb
 
       - name: Commit updated formula
