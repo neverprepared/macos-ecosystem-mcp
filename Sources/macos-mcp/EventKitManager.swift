@@ -1,4 +1,5 @@
 @preconcurrency import EventKit
+import CoreLocation
 import MCP
 import Foundation
 
@@ -41,13 +42,66 @@ actor EventKitManager {
         }
     }
 
+    // MARK: - Reminder Lists
+
+    func listReminderLists(args: [String: Value]) async throws -> String {
+        let lists = store.calendars(for: .reminder)
+        guard !lists.isEmpty else { return "No reminder lists found." }
+        var out = "Reminder lists (\(lists.count)):\n\n"
+        for list in lists.sorted(by: { $0.title < $1.title }) {
+            out += "• \(list.title)\n"
+            out += "  ID: \(list.calendarIdentifier)\n\n"
+        }
+        return out
+    }
+
+    func createReminderList(args: [String: Value]) async throws -> String {
+        guard let title = args["title"]?.stringValue, !title.isEmpty else {
+            throw ekError("'title' is required")
+        }
+        let newCal = EKCalendar(for: .reminder, eventStore: store)
+        newCal.title = title
+        guard let source = store.defaultCalendarForNewReminders()?.source else {
+            throw ekError("Could not determine source for new list")
+        }
+        newCal.source = source
+        try store.saveCalendar(newCal, commit: true)
+        return "✓ Created reminder list \"\(title)\"\n  ID: \(newCal.calendarIdentifier)"
+    }
+
+    func deleteReminderList(args: [String: Value]) async throws -> String {
+        let listId   = args["listId"]?.stringValue
+        let titleArg = args["title"]?.stringValue
+        guard listId != nil || titleArg != nil else {
+            throw ekError("Either 'listId' or 'title' must be provided")
+        }
+
+        let list: EKCalendar
+        if let lid = listId {
+            guard let cal = store.calendar(withIdentifier: lid),
+                  cal.allowedEntityTypes.contains(.reminder) else {
+                throw ekError("No reminder list found with ID: \(lid)")
+            }
+            list = cal
+        } else {
+            let all = store.calendars(for: .reminder)
+            guard let cal = all.first(where: { $0.title == titleArg }) else {
+                throw ekError("No reminder list found with title: \"\(titleArg!)\"")
+            }
+            list = cal
+        }
+        let title = list.title
+        try store.removeCalendar(list, commit: true)
+        return "✓ Deleted reminder list \"\(title)\" and all its reminders"
+    }
+
     // MARK: - Reminders
 
     func listReminders(args: [String: Value]) async throws -> String {
-        let listName     = args["list"]?.stringValue
+        let listName      = args["list"]?.stringValue
         let inclCompleted = args["includeCompleted"]?.boolValue ?? false
-        let limit        = args["limit"].asInt ?? 50
-        let offset       = args["offset"].asInt ?? 0
+        let limit         = args["limit"].asInt ?? 50
+        let offset        = args["offset"].asInt ?? 0
 
         let targetLists = try reminderCalendars(named: listName)
 
@@ -63,18 +117,7 @@ actor EventKitManager {
 
         var out = "Found \(paged.count) reminder(s) (offset \(offset), total \(reminders.count)):\n\n"
         for r in paged {
-            out += "• \(r.isCompleted ? "✓" : "○") \(r.title ?? "(no title)")"
-            let pri = r.priority
-            if pri != 0 { out += " [\(priorityLabel(pri))]" }
-            if let due = r.dueDateComponents.flatMap({ Calendar.current.date(from: $0) }) {
-                out += " (Due: \(formatDate(due)))"
-            }
-            out += "\n  List: \(r.calendar?.title ?? "Unknown")"
-            out += "\n  ID: \(r.calendarItemIdentifier)"
-            if let notes = r.notes, !notes.isEmpty {
-                out += "\n  Notes: \(notes)"
-            }
-            out += "\n\n"
+            out += formatReminderSummary(r)
         }
         return out
     }
@@ -83,10 +126,11 @@ actor EventKitManager {
         guard let title = args["title"]?.stringValue, !title.isEmpty else {
             throw ekError("'title' is required")
         }
-        let listName = args["list"]?.stringValue ?? "Reminders"
-        let noteText = args["notes"]?.stringValue
-        let dueDateStr = args["dueDate"]?.stringValue
+        let listName    = args["list"]?.stringValue ?? "Reminders"
+        let noteText    = args["notes"]?.stringValue
+        let dueDateStr  = args["dueDate"]?.stringValue
         let priorityStr = args["priority"]?.stringValue ?? "none"
+        let urlStr      = args["url"]?.stringValue
 
         let reminder = EKReminder(eventStore: store)
         reminder.title    = title
@@ -111,6 +155,40 @@ actor EventKitManager {
             reminder.dueDateComponents = components
         }
 
+        // URL
+        if let us = urlStr, !us.isEmpty, let url = URL(string: us) {
+            reminder.url = url
+        }
+
+        // Time-based alarms (minutes before due date)
+        if let alarmMins = args["alarms"]?.arrayValue?.compactMap({ $0.asInt }) {
+            for mins in alarmMins {
+                reminder.addAlarm(EKAlarm(relativeOffset: -Double(mins) * 60))
+            }
+        }
+
+        // Recurrence
+        if let freqStr = args["recurrenceFrequency"]?.stringValue {
+            let interval    = args["recurrenceInterval"].asInt ?? 1
+            let endDateStr  = args["recurrenceEndDate"]?.stringValue
+            let occurrences = args["recurrenceOccurrences"].asInt
+            if let rule = buildRecurrenceRule(frequency: freqStr, interval: interval,
+                                              endDate: endDateStr, occurrences: occurrences) {
+                reminder.recurrenceRules = [rule]
+            }
+        }
+
+        // Location alarm
+        if let locName = args["locationName"]?.stringValue, !locName.isEmpty {
+            let lat       = args["locationLatitude"].asDouble
+            let lon       = args["locationLongitude"].asDouble
+            let radius    = args["locationRadius"].asDouble ?? 100
+            let proximity = args["locationProximity"]?.stringValue ?? "arrive"
+            reminder.addAlarm(buildLocationAlarm(name: locName, latitude: lat,
+                                                 longitude: lon, radius: radius,
+                                                 proximity: proximity))
+        }
+
         try store.save(reminder, commit: true)
 
         let listTitle = reminder.calendar?.title ?? listName
@@ -131,7 +209,7 @@ actor EventKitManager {
             guard let item = store.calendarItem(withIdentifier: rid) as? EKReminder else {
                 throw ekError("No reminder found with ID: \(rid)")
             }
-            item.isCompleted   = true
+            item.isCompleted    = true
             item.completionDate = Date()
             try store.save(item, commit: true)
             return "✓ Completed: \"\(item.title ?? rid)\""
@@ -147,7 +225,7 @@ actor EventKitManager {
         guard let reminder = match else {
             throw ekError("No incomplete reminder found with title: \"\(title)\"")
         }
-        reminder.isCompleted   = true
+        reminder.isCompleted    = true
         reminder.completionDate = Date()
         try store.save(reminder, commit: true)
         return "✓ Completed: \"\(reminder.title ?? title)\" in \"\(reminder.calendar?.title ?? "?")\""
@@ -178,6 +256,7 @@ actor EventKitManager {
             reminder = match
         }
 
+        // Basic fields
         if let newTitle = args["newTitle"]?.stringValue, !newTitle.isEmpty {
             reminder.title = newTitle
         }
@@ -200,6 +279,54 @@ actor EventKitManager {
         if let newList = args["newList"]?.stringValue {
             let lists = store.calendars(for: .reminder).filter { $0.title == newList }
             if let list = lists.first { reminder.calendar = list }
+        }
+
+        // URL
+        if let urlStr = args["url"]?.stringValue {
+            reminder.url = urlStr.isEmpty ? nil : URL(string: urlStr)
+        }
+
+        // Time-based alarms — replace existing non-location alarms
+        if let alarmMins = args["alarms"]?.arrayValue {
+            let locAlarms = reminder.alarms?.filter { $0.structuredLocation != nil } ?? []
+            reminder.alarms = locAlarms.isEmpty ? nil : locAlarms
+            for mins in alarmMins.compactMap({ $0.asInt }) {
+                reminder.addAlarm(EKAlarm(relativeOffset: -Double(mins) * 60))
+            }
+        } else if args["clearAlarms"]?.boolValue == true {
+            let locAlarms = reminder.alarms?.filter { $0.structuredLocation != nil } ?? []
+            reminder.alarms = locAlarms.isEmpty ? nil : locAlarms
+        }
+
+        // Recurrence
+        if let freqStr = args["recurrenceFrequency"]?.stringValue {
+            let interval    = args["recurrenceInterval"].asInt ?? 1
+            let endDateStr  = args["recurrenceEndDate"]?.stringValue
+            let occurrences = args["recurrenceOccurrences"].asInt
+            if let rule = buildRecurrenceRule(frequency: freqStr, interval: interval,
+                                              endDate: endDateStr, occurrences: occurrences) {
+                reminder.recurrenceRules = [rule]
+            }
+        } else if args["clearRecurrence"]?.boolValue == true {
+            reminder.recurrenceRules = nil
+        }
+
+        // Location alarm — replace existing location alarms
+        if let locName = args["locationName"]?.stringValue {
+            let timeAlarms = reminder.alarms?.filter { $0.structuredLocation == nil } ?? []
+            reminder.alarms = timeAlarms.isEmpty ? nil : timeAlarms
+            if !locName.isEmpty {
+                let lat       = args["locationLatitude"].asDouble
+                let lon       = args["locationLongitude"].asDouble
+                let radius    = args["locationRadius"].asDouble ?? 100
+                let proximity = args["locationProximity"]?.stringValue ?? "arrive"
+                reminder.addAlarm(buildLocationAlarm(name: locName, latitude: lat,
+                                                     longitude: lon, radius: radius,
+                                                     proximity: proximity))
+            }
+        } else if args["clearLocationAlarm"]?.boolValue == true {
+            let timeAlarms = reminder.alarms?.filter { $0.structuredLocation == nil } ?? []
+            reminder.alarms = timeAlarms.isEmpty ? nil : timeAlarms
         }
 
         try store.save(reminder, commit: true)
@@ -262,14 +389,7 @@ actor EventKitManager {
 
         var out = "Found \(limited.count) reminder(s) matching \"\(query)\":\n\n"
         for r in limited {
-            out += "• \(r.isCompleted ? "✓" : "○") \(r.title ?? "(no title)")"
-            if r.priority != 0 { out += " [\(priorityLabel(r.priority))]" }
-            out += "\n  List: \(r.calendar?.title ?? "Unknown")"
-            out += "\n  ID: \(r.calendarItemIdentifier)"
-            if let notes = r.notes, !notes.isEmpty {
-                out += "\n  Notes: \(notes)"
-            }
-            out += "\n\n"
+            out += formatReminderSummary(r)
         }
         return out
     }
@@ -325,10 +445,10 @@ actor EventKitManager {
             throw ekError("'endDate' must be after 'startDate'")
         }
 
-        let calName  = args["calendar"]?.stringValue ?? "Calendar"
-        let location = args["location"]?.stringValue
-        let notes    = args["notes"]?.stringValue
-        let allDay   = args["allDay"]?.boolValue ?? false
+        let calName   = args["calendar"]?.stringValue ?? "Calendar"
+        let location  = args["location"]?.stringValue
+        let notes     = args["notes"]?.stringValue
+        let allDay    = args["allDay"]?.boolValue ?? false
         let alertMins = args["alerts"]?.arrayValue?.compactMap { $0.asInt } ?? []
 
         let event       = EKEvent(eventStore: store)
@@ -381,7 +501,7 @@ actor EventKitManager {
     }
 
     func deleteEvent(args: [String: Value]) async throws -> String {
-        let eventId = args["eventId"]?.stringValue
+        let eventId  = args["eventId"]?.stringValue
         let titleArg = args["title"]?.stringValue
         let dateArg  = args["date"]?.stringValue
 
@@ -404,11 +524,9 @@ actor EventKitManager {
         var start: Date
         var end: Date
         if let ds = dateArg, let d = parseISO8601(ds) {
-            // Search ±1 day around specified date
             start = d.addingTimeInterval(-86400)
             end   = d.addingTimeInterval(86400)
         } else {
-            // Search a wide window: 1 year back to 2 years forward
             start = Date().addingTimeInterval(-365 * 86400)
             end   = Date().addingTimeInterval(2 * 365 * 86400)
         }
@@ -515,6 +633,102 @@ actor EventKitManager {
         let filtered = store.calendars(for: .event).filter { $0.title == name }
         return filtered.isEmpty ? nil : filtered
     }
+
+    private func buildRecurrenceRule(frequency freqStr: String,
+                                     interval: Int,
+                                     endDate: String?,
+                                     occurrences: Int?) -> EKRecurrenceRule? {
+        let freq: EKRecurrenceFrequency
+        switch freqStr.lowercased() {
+        case "daily":   freq = .daily
+        case "weekly":  freq = .weekly
+        case "monthly": freq = .monthly
+        case "yearly":  freq = .yearly
+        default: return nil
+        }
+        var end: EKRecurrenceEnd?
+        if let endDateStr = endDate, let endDate = parseISO8601(endDateStr) {
+            end = EKRecurrenceEnd(end: endDate)
+        } else if let occ = occurrences, occ > 0 {
+            end = EKRecurrenceEnd(occurrenceCount: occ)
+        }
+        return EKRecurrenceRule(recurrenceWith: freq, interval: max(1, interval), end: end)
+    }
+
+    private func buildLocationAlarm(name: String,
+                                    latitude: Double?,
+                                    longitude: Double?,
+                                    radius: Double,
+                                    proximity: String) -> EKAlarm {
+        let alarm = EKAlarm()
+        let loc   = EKStructuredLocation(title: name)
+        if let lat = latitude, let lon = longitude {
+            loc.geoLocation = CLLocation(latitude: lat, longitude: lon)
+        }
+        loc.radius         = radius
+        alarm.structuredLocation = loc
+        alarm.proximity    = proximity.lowercased() == "leave" ? .leave : .enter
+        return alarm
+    }
+
+    private func formatRecurrenceRule(_ rule: EKRecurrenceRule) -> String {
+        var desc: String
+        switch rule.frequency {
+        case .daily:   desc = rule.interval == 1 ? "Daily"   : "Every \(rule.interval) days"
+        case .weekly:  desc = rule.interval == 1 ? "Weekly"  : "Every \(rule.interval) weeks"
+        case .monthly: desc = rule.interval == 1 ? "Monthly" : "Every \(rule.interval) months"
+        case .yearly:  desc = rule.interval == 1 ? "Yearly"  : "Every \(rule.interval) years"
+        @unknown default: desc = "Custom"
+        }
+        if let end = rule.recurrenceEnd {
+            if let endDate = end.endDate {
+                desc += " until \(formatDate(endDate))"
+            } else if end.occurrenceCount > 0 {
+                desc += " for \(end.occurrenceCount) occurrences"
+            }
+        }
+        return desc
+    }
+
+    /// Unified reminder summary used by both listReminders and searchReminders.
+    private func formatReminderSummary(_ r: EKReminder) -> String {
+        var out = "• \(r.isCompleted ? "✓" : "○") \(r.title ?? "(no title)")"
+        let pri = r.priority
+        if pri != 0 { out += " [\(priorityLabel(pri))]" }
+        if let due = r.dueDateComponents.flatMap({ Calendar.current.date(from: $0) }) {
+            out += " (Due: \(formatDate(due)))"
+        }
+        out += "\n  List: \(r.calendar?.title ?? "Unknown")"
+        out += "\n  ID: \(r.calendarItemIdentifier)"
+        if let notes = r.notes, !notes.isEmpty {
+            out += "\n  Notes: \(notes)"
+        }
+        if let url = r.url {
+            out += "\n  URL: \(url.absoluteString)"
+        }
+        // Time-based alarms
+        if let alarms = r.alarms {
+            let timeAlarms = alarms.filter { $0.structuredLocation == nil && $0.absoluteDate == nil }
+            if !timeAlarms.isEmpty {
+                let labels = timeAlarms.map { "\(Int(-$0.relativeOffset / 60))min before" }
+                out += "\n  Alarms: \(labels.joined(separator: ", "))"
+            }
+            let locAlarms = alarms.filter { $0.structuredLocation != nil }
+            for la in locAlarms {
+                if let loc = la.structuredLocation {
+                    let dir = la.proximity == .leave ? "leaving" : "arriving at"
+                    out += "\n  Location alarm: when \(dir) \"\(loc.title ?? "location")\""
+                }
+            }
+        }
+        if let rules = r.recurrenceRules, !rules.isEmpty {
+            for rule in rules {
+                out += "\n  Recurrence: \(formatRecurrenceRule(rule))"
+            }
+        }
+        out += "\n\n"
+        return out
+    }
 }
 
 // MARK: - Helpers (module-level)
@@ -586,12 +800,25 @@ extension Optional where Wrapped == Value {
         case .none:        return nil
         }
     }
+
+    var asDouble: Double? {
+        switch self {
+        case .some(let v): return v.asDouble
+        case .none:        return nil
+        }
+    }
 }
 
 extension Value {
     var asInt: Int? {
-        if let i = intValue  { return i }
+        if let i = intValue   { return i }
         if let d = doubleValue { return Int(d) }
+        return nil
+    }
+
+    var asDouble: Double? {
+        if let d = doubleValue { return d }
+        if let i = intValue   { return Double(i) }
         return nil
     }
 }

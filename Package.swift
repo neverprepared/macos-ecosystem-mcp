@@ -18,7 +18,10 @@ let package = Package(
             dependencies: [
                 .product(name: "MCP", package: "swift-sdk")
             ],
-            path: "Sources/macos-mcp"
+            path: "Sources/macos-mcp",
+            linkerSettings: [
+                .linkedFramework("CoreLocation")
+            ]
         )
     ]
 )

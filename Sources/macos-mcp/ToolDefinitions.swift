@@ -1,8 +1,54 @@
 import MCP
 
-/// All 15 tool definitions exposed by this server.
+/// All 18 tool definitions exposed by this server.
 /// Parameter names and types match the original TypeScript schemas exactly.
 let allTools: [Tool] = [
+
+    // ── Reminder Lists ────────────────────────────────────────────────────────
+
+    Tool(
+        name: "reminders_list_lists",
+        description: "List all reminder lists (calendars) available in the macOS Reminders app.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([:]),
+            "required": .array([])
+        ])
+    ),
+
+    Tool(
+        name: "reminders_create_list",
+        description: "Create a new reminder list in the macOS Reminders app.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "title": .object([
+                    "type": .string("string"),
+                    "description": .string("Name of the new list (required).")
+                ])
+            ]),
+            "required": .array([.string("title")])
+        ])
+    ),
+
+    Tool(
+        name: "reminders_delete_list",
+        description: "Delete a reminder list and all its reminders. Identify by listId or title.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "listId": .object([
+                    "type": .string("string"),
+                    "description": .string("The EKCalendar calendarIdentifier (preferred).")
+                ]),
+                "title": .object([
+                    "type": .string("string"),
+                    "description": .string("Name of the list to delete (used when listId is absent).")
+                ])
+            ]),
+            "required": .array([])
+        ])
+    ),
 
     // ── Reminders ────────────────────────────────────────────────────────────
 
@@ -35,10 +81,56 @@ let allTools: [Tool] = [
                     "description": .string("Reminder priority. Defaults to 'none'"),
                     "default": .string("none")
                 ]),
-                "flagged": .object([
-                    "type": .string("boolean"),
-                    "description": .string("Whether to flag the reminder. Note: flagged status is not available via EventKit and will be ignored."),
-                    "default": .bool(false)
+                "url": .object([
+                    "type": .string("string"),
+                    "description": .string("Optional URL to attach to the reminder.")
+                ]),
+                "alarms": .object([
+                    "type": .string("array"),
+                    "description": .string("Alert offsets in minutes before due date (e.g. [15, 60])."),
+                    "items": .object(["type": .string("integer")])
+                ]),
+                "recurrenceFrequency": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("daily"), .string("weekly"), .string("monthly"), .string("yearly")]),
+                    "description": .string("Recurrence frequency.")
+                ]),
+                "recurrenceInterval": .object([
+                    "type": .string("integer"),
+                    "description": .string("Repeat every N frequency units. Defaults to 1."),
+                    "default": .int(1),
+                    "minimum": .int(1)
+                ]),
+                "recurrenceEndDate": .object([
+                    "type": .string("string"),
+                    "description": .string("ISO 8601 date when recurrence ends (optional).")
+                ]),
+                "recurrenceOccurrences": .object([
+                    "type": .string("integer"),
+                    "description": .string("Stop after this many occurrences (optional).")
+                ]),
+                "locationName": .object([
+                    "type": .string("string"),
+                    "description": .string("Display name of the location for a proximity alarm.")
+                ]),
+                "locationLatitude": .object([
+                    "type": .string("number"),
+                    "description": .string("Latitude for the location alarm.")
+                ]),
+                "locationLongitude": .object([
+                    "type": .string("number"),
+                    "description": .string("Longitude for the location alarm.")
+                ]),
+                "locationRadius": .object([
+                    "type": .string("number"),
+                    "description": .string("Geofence radius in metres. Defaults to 100."),
+                    "default": .int(100)
+                ]),
+                "locationProximity": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("arrive"), .string("leave")]),
+                    "description": .string("Trigger when arriving at or leaving the location. Defaults to 'arrive'."),
+                    "default": .string("arrive")
                 ])
             ]),
             "required": .array([.string("title")])
@@ -134,7 +226,7 @@ let allTools: [Tool] = [
 
     Tool(
         name: "reminders_update",
-        description: "Update an existing reminder's title, notes, due date, priority, or list.",
+        description: "Update an existing reminder's title, notes, due date, priority, list, URL, alarms, recurrence, or location alarm.",
         inputSchema: .object([
             "type": .string("object"),
             "properties": .object([
@@ -160,7 +252,7 @@ let allTools: [Tool] = [
                 ]),
                 "dueDate": .object([
                     "type": .string("string"),
-                    "description": .string("New ISO 8601 due date, e.g. '2025-06-15T18:00:00'. Pass empty string to clear.")
+                    "description": .string("New ISO 8601 due date. Pass empty string to clear.")
                 ]),
                 "priority": .object([
                     "type": .string("string"),
@@ -170,6 +262,66 @@ let allTools: [Tool] = [
                 "newList": .object([
                     "type": .string("string"),
                     "description": .string("Move reminder to this list.")
+                ]),
+                "url": .object([
+                    "type": .string("string"),
+                    "description": .string("New URL. Pass empty string to clear.")
+                ]),
+                "alarms": .object([
+                    "type": .string("array"),
+                    "description": .string("Replace time-based alarms with these minute offsets before due date. Pass [] to clear."),
+                    "items": .object(["type": .string("integer")])
+                ]),
+                "clearAlarms": .object([
+                    "type": .string("boolean"),
+                    "description": .string("Set true to remove all time-based alarms.")
+                ]),
+                "recurrenceFrequency": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("daily"), .string("weekly"), .string("monthly"), .string("yearly")]),
+                    "description": .string("Set or replace recurrence frequency.")
+                ]),
+                "recurrenceInterval": .object([
+                    "type": .string("integer"),
+                    "description": .string("Repeat every N units. Defaults to 1."),
+                    "default": .int(1)
+                ]),
+                "recurrenceEndDate": .object([
+                    "type": .string("string"),
+                    "description": .string("ISO 8601 date when recurrence ends.")
+                ]),
+                "recurrenceOccurrences": .object([
+                    "type": .string("integer"),
+                    "description": .string("Stop after this many occurrences.")
+                ]),
+                "clearRecurrence": .object([
+                    "type": .string("boolean"),
+                    "description": .string("Set true to remove the recurrence rule.")
+                ]),
+                "locationName": .object([
+                    "type": .string("string"),
+                    "description": .string("Set or replace location alarm. Pass empty string to clear.")
+                ]),
+                "locationLatitude": .object([
+                    "type": .string("number"),
+                    "description": .string("Latitude for the location alarm.")
+                ]),
+                "locationLongitude": .object([
+                    "type": .string("number"),
+                    "description": .string("Longitude for the location alarm.")
+                ]),
+                "locationRadius": .object([
+                    "type": .string("number"),
+                    "description": .string("Geofence radius in metres. Defaults to 100.")
+                ]),
+                "locationProximity": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("arrive"), .string("leave")]),
+                    "description": .string("Trigger on arrive or leave. Defaults to 'arrive'.")
+                ]),
+                "clearLocationAlarm": .object([
+                    "type": .string("boolean"),
+                    "description": .string("Set true to remove the location alarm.")
                 ])
             ]),
             "required": .array([])

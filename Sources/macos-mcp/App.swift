@@ -4,7 +4,7 @@ import Foundation
 @main
 struct MacOSMCPApp {
     static func main() async throws {
-        log("Starting macOS Ecosystem MCP Server v0.3.2 (Swift/EventKit)")
+        log("Starting macOS Ecosystem MCP Server v0.4.0 (Swift/EventKit)")
 
         // Initialise EventKit and request permissions before handling any requests
         let ekManager = EventKitManager()
@@ -14,7 +14,7 @@ struct MacOSMCPApp {
 
         let server = Server(
             name: "macos-ecosystem-mcp",
-            version: "0.3.2",
+            version: "0.4.0",
             capabilities: Server.Capabilities(
                 tools: .init(listChanged: false)
             )
@@ -28,7 +28,7 @@ struct MacOSMCPApp {
             await dispatch(params: params, ekManager: ekManager)
         }
 
-        log("All 15 tools registered, connecting stdio transport")
+        log("All 18 tools registered, connecting stdio transport")
 
         let transport = StdioTransport()
         try await server.start(transport: transport)
@@ -42,6 +42,14 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager) a
     do {
         let text: String = try await {
             switch params.name {
+            // ── Reminder Lists ─────────────────────────────────────────────
+            case "reminders_list_lists":
+                return try await ekManager.listReminderLists(args: params.arguments ?? [:])
+            case "reminders_create_list":
+                return try await ekManager.createReminderList(args: params.arguments ?? [:])
+            case "reminders_delete_list":
+                return try await ekManager.deleteReminderList(args: params.arguments ?? [:])
+
             // ── Reminders ──────────────────────────────────────────────────
             case "reminders_list":
                 return try await ekManager.listReminders(args: params.arguments ?? [:])
