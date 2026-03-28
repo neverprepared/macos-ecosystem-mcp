@@ -20,7 +20,8 @@ let package = Package(
             ],
             path: "Sources/macos-mcp",
             linkerSettings: [
-                .linkedFramework("CoreLocation")
+                .linkedFramework("CoreLocation"),
+                .linkedFramework("Contacts")
             ]
         )
     ]

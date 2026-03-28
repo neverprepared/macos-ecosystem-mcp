@@ -1,6 +1,6 @@
 import MCP
 
-/// All 18 tool definitions exposed by this server.
+/// All 23 tool definitions exposed by this server.
 /// Parameter names and types match the original TypeScript schemas exactly.
 let allTools: [Tool] = [
 
@@ -527,6 +527,210 @@ let allTools: [Tool] = [
                 ])
             ]),
             "required": .array([])
+        ])
+    ),
+
+    // ── Contacts ─────────────────────────────────────────────────────────────
+
+    Tool(
+        name: "contacts_search",
+        description: "Search contacts by name, email address, or phone number.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "query": .object([
+                    "type": .string("string"),
+                    "description": .string("Name, email, or phone to search for (required).")
+                ]),
+                "limit": .object([
+                    "type": .string("integer"),
+                    "description": .string("Maximum results (1–100). Defaults to 20."),
+                    "minimum": .int(1),
+                    "maximum": .int(100),
+                    "default": .int(20)
+                ])
+            ]),
+            "required": .array([.string("query")])
+        ])
+    ),
+
+    Tool(
+        name: "contacts_get",
+        description: "Get full details for a contact by their contactId.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "contactId": .object([
+                    "type": .string("string"),
+                    "description": .string("The CNContact identifier (required).")
+                ])
+            ]),
+            "required": .array([.string("contactId")])
+        ])
+    ),
+
+    Tool(
+        name: "contacts_add",
+        description: "Create a new contact in the macOS Contacts app.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "givenName": .object([
+                    "type": .string("string"),
+                    "description": .string("First name (required).")
+                ]),
+                "familyName": .object([
+                    "type": .string("string"),
+                    "description": .string("Last name.")
+                ]),
+                "middleName": .object([
+                    "type": .string("string"),
+                    "description": .string("Middle name.")
+                ]),
+                "nickname": .object([
+                    "type": .string("string"),
+                    "description": .string("Nickname.")
+                ]),
+                "organizationName": .object([
+                    "type": .string("string"),
+                    "description": .string("Company or organization name.")
+                ]),
+                "jobTitle": .object([
+                    "type": .string("string"),
+                    "description": .string("Job title.")
+                ]),
+                "phones": .object([
+                    "type": .string("array"),
+                    "description": .string("List of phone numbers."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "phoneLabels": .object([
+                    "type": .string("array"),
+                    "description": .string("Labels for each phone (e.g. 'mobile', 'work', 'home'). Parallel to phones."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "emails": .object([
+                    "type": .string("array"),
+                    "description": .string("List of email addresses."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "emailLabels": .object([
+                    "type": .string("array"),
+                    "description": .string("Labels for each email (e.g. 'work', 'home'). Parallel to emails."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "addressStreet": .object([
+                    "type": .string("string"),
+                    "description": .string("Street address.")
+                ]),
+                "addressCity": .object([
+                    "type": .string("string"),
+                    "description": .string("City.")
+                ]),
+                "addressState": .object([
+                    "type": .string("string"),
+                    "description": .string("State or province.")
+                ]),
+                "addressZip": .object([
+                    "type": .string("string"),
+                    "description": .string("Postal / ZIP code.")
+                ]),
+                "addressCountry": .object([
+                    "type": .string("string"),
+                    "description": .string("Country.")
+                ]),
+                "birthday": .object([
+                    "type": .string("string"),
+                    "description": .string("ISO 8601 date, e.g. '1990-06-15'.")
+                ]),
+                "note": .object([
+                    "type": .string("string"),
+                    "description": .string("Free-form note.")
+                ])
+            ]),
+            "required": .array([.string("givenName")])
+        ])
+    ),
+
+    Tool(
+        name: "contacts_update",
+        description: "Update an existing contact by contactId. Only supplied fields are changed.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "contactId": .object([
+                    "type": .string("string"),
+                    "description": .string("The CNContact identifier (required).")
+                ]),
+                "givenName": .object([
+                    "type": .string("string"),
+                    "description": .string("New first name.")
+                ]),
+                "familyName": .object([
+                    "type": .string("string"),
+                    "description": .string("New last name.")
+                ]),
+                "middleName": .object([
+                    "type": .string("string"),
+                    "description": .string("New middle name.")
+                ]),
+                "nickname": .object([
+                    "type": .string("string"),
+                    "description": .string("New nickname.")
+                ]),
+                "organizationName": .object([
+                    "type": .string("string"),
+                    "description": .string("New organization name.")
+                ]),
+                "jobTitle": .object([
+                    "type": .string("string"),
+                    "description": .string("New job title.")
+                ]),
+                "phones": .object([
+                    "type": .string("array"),
+                    "description": .string("Replace all phone numbers with this list."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "phoneLabels": .object([
+                    "type": .string("array"),
+                    "description": .string("Labels for each phone. Parallel to phones."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "emails": .object([
+                    "type": .string("array"),
+                    "description": .string("Replace all email addresses with this list."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "emailLabels": .object([
+                    "type": .string("array"),
+                    "description": .string("Labels for each email. Parallel to emails."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "birthday": .object([
+                    "type": .string("string"),
+                    "description": .string("New birthday (ISO 8601). Pass empty string to clear.")
+                ]),
+                "note": .object([
+                    "type": .string("string"),
+                    "description": .string("New note.")
+                ])
+            ]),
+            "required": .array([.string("contactId")])
+        ])
+    ),
+
+    Tool(
+        name: "contacts_delete",
+        description: "Permanently delete a contact by contactId.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "contactId": .object([
+                    "type": .string("string"),
+                    "description": .string("The CNContact identifier (required).")
+                ])
+            ]),
+            "required": .array([.string("contactId")])
         ])
     ),
 

@@ -4,17 +4,19 @@ import Foundation
 @main
 struct MacOSMCPApp {
     static func main() async throws {
-        log("Starting macOS Ecosystem MCP Server v0.4.0 (Swift/EventKit)")
+        log("Starting macOS Ecosystem MCP Server v0.5.0 (Swift/EventKit/Contacts)")
 
         // Initialise EventKit and request permissions before handling any requests
         let ekManager = EventKitManager()
+        let cnManager = ContactsManager()
         await ekManager.requestPermissions()
+        await cnManager.requestPermissions()
 
         log("EventKit ready, registering tools")
 
         let server = Server(
             name: "macos-ecosystem-mcp",
-            version: "0.4.0",
+            version: "0.5.0",
             capabilities: Server.Capabilities(
                 tools: .init(listChanged: false)
             )
@@ -25,10 +27,10 @@ struct MacOSMCPApp {
         }
 
         await server.withMethodHandler(CallTool.self) { params in
-            await dispatch(params: params, ekManager: ekManager)
+            await dispatch(params: params, ekManager: ekManager, cnManager: cnManager)
         }
 
-        log("All 18 tools registered, connecting stdio transport")
+        log("All 23 tools registered, connecting stdio transport")
 
         let transport = StdioTransport()
         try await server.start(transport: transport)
@@ -38,7 +40,7 @@ struct MacOSMCPApp {
 
 // MARK: - Tool dispatcher
 
-private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager) async -> CallTool.Result {
+private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, cnManager: ContactsManager) async -> CallTool.Result {
     do {
         let text: String = try await {
             switch params.name {
@@ -75,6 +77,18 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager) a
                 return try await ekManager.deleteEvent(args: params.arguments ?? [:])
             case "calendar_find_free_time":
                 return try await ekManager.findFreeTime(args: params.arguments ?? [:])
+
+            // ── Contacts ───────────────────────────────────────────────────
+            case "contacts_search":
+                return try await cnManager.searchContacts(args: params.arguments ?? [:])
+            case "contacts_get":
+                return try await cnManager.getContact(args: params.arguments ?? [:])
+            case "contacts_add":
+                return try await cnManager.addContact(args: params.arguments ?? [:])
+            case "contacts_update":
+                return try await cnManager.updateContact(args: params.arguments ?? [:])
+            case "contacts_delete":
+                return try await cnManager.deleteContact(args: params.arguments ?? [:])
 
             // ── Notes (osascript) ──────────────────────────────────────────
             case "notes_create":
