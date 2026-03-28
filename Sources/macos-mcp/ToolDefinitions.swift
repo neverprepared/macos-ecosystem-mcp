@@ -1,6 +1,6 @@
 import MCP
 
-/// All 23 tool definitions exposed by this server.
+/// All 24 tool definitions exposed by this server.
 /// Parameter names and types match the original TypeScript schemas exactly.
 let allTools: [Tool] = [
 
@@ -533,6 +533,16 @@ let allTools: [Tool] = [
     // ── Contacts ─────────────────────────────────────────────────────────────
 
     Tool(
+        name: "contacts_list_accounts",
+        description: "List all contact accounts/containers (iCloud, Exchange/OWA, On My Mac, etc.).",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([:]),
+            "required": .array([])
+        ])
+    ),
+
+    Tool(
         name: "contacts_search",
         description: "Search contacts by name, email address, or phone number.",
         inputSchema: .object([
@@ -548,6 +558,10 @@ let allTools: [Tool] = [
                     "minimum": .int(1),
                     "maximum": .int(100),
                     "default": .int(20)
+                ]),
+                "account": .object([
+                    "type": .string("string"),
+                    "description": .string("Filter by account name (e.g. 'iCloud', 'OWA'). Use contacts_list_accounts to see available accounts. Pass '*' as query to list all contacts in the account.")
                 ])
             ]),
             "required": .array([.string("query")])

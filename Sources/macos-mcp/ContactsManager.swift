@@ -41,16 +41,53 @@ actor ContactsManager {
 
     // MARK: - Tools
 
+    func listAccounts(args: [String: Value]) async throws -> String {
+        let containers = try store.containers(matching: nil)
+        guard !containers.isEmpty else { return "No contact accounts found." }
+        var out = "Contact accounts (\(containers.count)):\n\n"
+        for c in containers {
+            let type: String
+            switch c.type {
+            case .local:      type = "On My Mac"
+            case .exchange:   type = "Exchange / OWA"
+            case .cardDAV:    type = "CardDAV"
+            case .unassigned: type = "Unassigned"
+            @unknown default: type = "Unknown"
+            }
+            out += "• \(c.name) [\(type)]\n  ID: \(c.identifier)\n\n"
+        }
+        return out
+    }
+
     func searchContacts(args: [String: Value]) async throws -> String {
         guard let query = args["query"]?.stringValue, !query.isEmpty else {
             throw contactsError("'query' is required")
         }
-        let limit = args["limit"].asInt ?? 20
-        let q = query.trimmingCharacters(in: .whitespaces)
+        let limit       = args["limit"].asInt ?? 20
+        let accountName = args["account"]?.stringValue
+        let q           = query.trimmingCharacters(in: .whitespaces)
+
+        // Resolve container filter if requested
+        var containerIdentifier: String? = nil
+        if let name = accountName {
+            let containers = try store.containers(matching: nil)
+            guard let match = containers.first(where: { $0.name.lowercased() == name.lowercased() }) else {
+                let names = containers.map { $0.name }.joined(separator: ", ")
+                throw contactsError("No account named \"\(name)\". Available: \(names)")
+            }
+            containerIdentifier = match.identifier
+        }
 
         // Route to the right predicate based on query shape
         let predicate: NSPredicate
-        if q.contains("@") {
+        if q == "*" {
+            // Wildcard: fetch all contacts in the container
+            if let cid = containerIdentifier {
+                predicate = CNContact.predicateForContactsInContainer(withIdentifier: cid)
+            } else {
+                predicate = CNContact.predicateForContacts(matchingName: "")
+            }
+        } else if q.contains("@") {
             predicate = CNContact.predicateForContacts(matchingEmailAddress: q)
         } else if q.filter({ $0.isNumber }).count > 5 {
             predicate = CNContact.predicateForContacts(matching: CNPhoneNumber(stringValue: q))
@@ -58,14 +95,24 @@ actor ContactsManager {
             predicate = CNContact.predicateForContacts(matchingName: q)
         }
 
-        let contacts = try store.unifiedContacts(matching: predicate, keysToFetch: fetchKeys)
-        let limited  = Array(contacts.prefix(limit))
+        var contacts = try store.unifiedContacts(matching: predicate, keysToFetch: fetchKeys)
 
-        guard !limited.isEmpty else {
-            return "No contacts matching \"\(query)\"."
+        // Filter to container post-fetch when combined with a name query
+        if let cid = containerIdentifier, q != "*" {
+            let containerPred = CNContact.predicateForContactsInContainer(withIdentifier: cid)
+            let containerContacts = try store.unifiedContacts(matching: containerPred, keysToFetch: fetchKeys)
+            let containerIds = Set(containerContacts.map { $0.identifier })
+            contacts = contacts.filter { containerIds.contains($0.identifier) }
         }
 
-        var out = "Found \(limited.count) contact(s) matching \"\(query)\":\n\n"
+        let limited = Array(contacts.prefix(limit))
+        guard !limited.isEmpty else {
+            let scope = accountName.map { " in \"\($0)\"" } ?? ""
+            return "No contacts matching \"\(query)\"\(scope)."
+        }
+
+        let scope = accountName.map { " in \"\($0)\"" } ?? ""
+        var out = "Found \(limited.count) contact(s) matching \"\(query)\"\(scope):\n\n"
         for c in limited { out += formatContactSummary(c) }
         return out
     }

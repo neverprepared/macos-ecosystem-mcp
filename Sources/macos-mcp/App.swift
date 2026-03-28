@@ -4,7 +4,7 @@ import Foundation
 @main
 struct MacOSMCPApp {
     static func main() async throws {
-        log("Starting macOS Ecosystem MCP Server v0.5.0 (Swift/EventKit/Contacts)")
+        log("Starting macOS Ecosystem MCP Server v0.5.1 (Swift/EventKit/Contacts)")
 
         // Initialise EventKit and request permissions before handling any requests
         let ekManager = EventKitManager()
@@ -16,7 +16,7 @@ struct MacOSMCPApp {
 
         let server = Server(
             name: "macos-ecosystem-mcp",
-            version: "0.5.0",
+            version: "0.5.1",
             capabilities: Server.Capabilities(
                 tools: .init(listChanged: false)
             )
@@ -30,7 +30,7 @@ struct MacOSMCPApp {
             await dispatch(params: params, ekManager: ekManager, cnManager: cnManager)
         }
 
-        log("All 23 tools registered, connecting stdio transport")
+        log("All 24 tools registered, connecting stdio transport")
 
         let transport = StdioTransport()
         try await server.start(transport: transport)
@@ -79,6 +79,8 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, c
                 return try await ekManager.findFreeTime(args: params.arguments ?? [:])
 
             // ── Contacts ───────────────────────────────────────────────────
+            case "contacts_list_accounts":
+                return try await cnManager.listAccounts(args: params.arguments ?? [:])
             case "contacts_search":
                 return try await cnManager.searchContacts(args: params.arguments ?? [:])
             case "contacts_get":
