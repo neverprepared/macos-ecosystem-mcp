@@ -10,6 +10,10 @@ actor ContactsManager {
     private let store = CNContactStore()
 
     // All contact fields we fetch in every request.
+    // NOTE: CNContactNoteKey is intentionally excluded — it requires the restricted
+    // com.apple.developer.contacts.notes entitlement on macOS 13+. Without it the
+    // Objective-C runtime throws an NSException that Swift cannot catch, crashing
+    // the process. Notes are therefore not supported.
     private let fetchKeys: [CNKeyDescriptor] = [
         CNContactIdentifierKey,
         CNContactNamePrefixKey,
@@ -25,7 +29,6 @@ actor ContactsManager {
         CNContactEmailAddressesKey,
         CNContactPostalAddressesKey,
         CNContactBirthdayKey,
-        CNContactNoteKey,
     ] as [CNKeyDescriptor]
 
     // MARK: Permissions
@@ -81,12 +84,11 @@ actor ContactsManager {
         // Route to the right predicate based on query shape
         let predicate: NSPredicate
         if q == "*" {
-            // Wildcard: fetch all contacts in the container
-            if let cid = containerIdentifier {
-                predicate = CNContact.predicateForContactsInContainer(withIdentifier: cid)
-            } else {
-                predicate = CNContact.predicateForContacts(matchingName: "")
+            // Wildcard: list all contacts in a specific account (account is required)
+            guard let cid = containerIdentifier else {
+                throw contactsError("Wildcard '*' requires an 'account' to be specified. Use contacts_list_accounts to see available accounts.")
             }
+            predicate = CNContact.predicateForContactsInContainer(withIdentifier: cid)
         } else if q.contains("@") {
             predicate = CNContact.predicateForContacts(matchingEmailAddress: q)
         } else if q.filter({ $0.isNumber }).count > 5 {
@@ -141,7 +143,6 @@ actor ContactsManager {
         contact.nickname         = args["nickname"]?.stringValue         ?? ""
         contact.organizationName = args["organizationName"]?.stringValue ?? ""
         contact.jobTitle         = args["jobTitle"]?.stringValue         ?? ""
-        contact.note             = args["note"]?.stringValue             ?? ""
 
         contact.phoneNumbers  = buildPhoneNumbers(args)
         contact.emailAddresses = buildEmailAddresses(args)
@@ -186,7 +187,6 @@ actor ContactsManager {
         if let v = args["nickname"]?.stringValue         { mutable.nickname         = v }
         if let v = args["organizationName"]?.stringValue { mutable.organizationName = v }
         if let v = args["jobTitle"]?.stringValue         { mutable.jobTitle         = v }
-        if let v = args["note"]?.stringValue             { mutable.note             = v }
 
         if args["phones"] != nil {
             mutable.phoneNumbers = buildPhoneNumbers(args)
@@ -312,10 +312,6 @@ actor ContactsManager {
 
         if let bday = c.birthday, let date = Calendar.current.date(from: bday) {
             out += "\nBirthday: \(formatDate(date))\n"
-        }
-
-        if !c.note.isEmpty {
-            out += "\nNote: \(c.note)\n"
         }
 
         return out

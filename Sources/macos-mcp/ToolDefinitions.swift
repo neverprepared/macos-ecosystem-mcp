@@ -656,10 +656,6 @@ let allTools: [Tool] = [
                 "birthday": .object([
                     "type": .string("string"),
                     "description": .string("ISO 8601 date, e.g. '1990-06-15'.")
-                ]),
-                "note": .object([
-                    "type": .string("string"),
-                    "description": .string("Free-form note.")
                 ])
             ]),
             "required": .array([.string("givenName")])
@@ -723,10 +719,6 @@ let allTools: [Tool] = [
                 "birthday": .object([
                     "type": .string("string"),
                     "description": .string("New birthday (ISO 8601). Pass empty string to clear.")
-                ]),
-                "note": .object([
-                    "type": .string("string"),
-                    "description": .string("New note.")
                 ])
             ]),
             "required": .array([.string("contactId")])
