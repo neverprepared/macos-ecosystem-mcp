@@ -1,7 +1,6 @@
 import MCP
 
-/// All 24 tool definitions exposed by this server.
-/// Parameter names and types match the original TypeScript schemas exactly.
+/// All 29 tool definitions exposed by this server.
 let allTools: [Tool] = [
 
     // ── Reminder Lists ────────────────────────────────────────────────────────
@@ -171,6 +170,21 @@ let allTools: [Tool] = [
     ),
 
     Tool(
+        name: "reminders_get",
+        description: "Get full details for a single reminder by its reminderId.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "reminderId": .object([
+                    "type": .string("string"),
+                    "description": .string("The EventKit calendarItemIdentifier (required).")
+                ])
+            ]),
+            "required": .array([.string("reminderId")])
+        ])
+    ),
+
+    Tool(
         name: "reminders_complete",
         description: "Mark a reminder as completed. Identify by reminderId or title (with optional list filter).",
         inputSchema: .object([
@@ -183,6 +197,29 @@ let allTools: [Tool] = [
                 "title": .object([
                     "type": .string("string"),
                     "description": .string("Title of the reminder to complete (used when reminderId is absent).")
+                ]),
+                "list": .object([
+                    "type": .string("string"),
+                    "description": .string("Narrow the title search to a specific list.")
+                ])
+            ]),
+            "required": .array([])
+        ])
+    ),
+
+    Tool(
+        name: "reminders_uncomplete",
+        description: "Mark a completed reminder as incomplete. Identify by reminderId or title.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "reminderId": .object([
+                    "type": .string("string"),
+                    "description": .string("The EventKit calendarItemIdentifier of the reminder (preferred).")
+                ]),
+                "title": .object([
+                    "type": .string("string"),
+                    "description": .string("Title of the completed reminder (used when reminderId is absent).")
                 ]),
                 "list": .object([
                     "type": .string("string"),
@@ -354,6 +391,16 @@ let allTools: [Tool] = [
     // ── Calendar ─────────────────────────────────────────────────────────────
 
     Tool(
+        name: "calendar_list_calendars",
+        description: "List all calendars available in the macOS Calendar app.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([:]),
+            "required": .array([])
+        ])
+    ),
+
+    Tool(
         name: "calendar_create_event",
         description: "Create a new event in the macOS Calendar app.",
         inputSchema: .object([
@@ -397,6 +444,25 @@ let allTools: [Tool] = [
                         "minimum": .int(0),
                         "maximum": .int(10080)
                     ])
+                ]),
+                "recurrenceFrequency": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("daily"), .string("weekly"), .string("monthly"), .string("yearly")]),
+                    "description": .string("Recurrence frequency.")
+                ]),
+                "recurrenceInterval": .object([
+                    "type": .string("integer"),
+                    "description": .string("Repeat every N frequency units. Defaults to 1."),
+                    "default": .int(1),
+                    "minimum": .int(1)
+                ]),
+                "recurrenceEndDate": .object([
+                    "type": .string("string"),
+                    "description": .string("ISO 8601 date when recurrence ends (optional).")
+                ]),
+                "recurrenceOccurrences": .object([
+                    "type": .string("integer"),
+                    "description": .string("Stop after this many occurrences (optional).")
                 ])
             ]),
             "required": .array([.string("title"), .string("startDate"), .string("endDate")])
@@ -550,7 +616,7 @@ let allTools: [Tool] = [
             "properties": .object([
                 "query": .object([
                     "type": .string("string"),
-                    "description": .string("Name, email, or phone to search for (required).")
+                    "description": .string("Name, email, or phone to search for. Use '*' with account to list all contacts in an account.")
                 ]),
                 "limit": .object([
                     "type": .string("integer"),
@@ -559,9 +625,15 @@ let allTools: [Tool] = [
                     "maximum": .int(100),
                     "default": .int(20)
                 ]),
+                "offset": .object([
+                    "type": .string("integer"),
+                    "description": .string("Number of contacts to skip for pagination. Defaults to 0."),
+                    "minimum": .int(0),
+                    "default": .int(0)
+                ]),
                 "account": .object([
                     "type": .string("string"),
-                    "description": .string("Filter by account name (e.g. 'iCloud', 'OWA'). Use contacts_list_accounts to see available accounts. Pass '*' as query to list all contacts in the account.")
+                    "description": .string("Filter by account name (e.g. 'iCloud', 'On My Mac'). Use contacts_list_accounts to see available accounts.")
                 ])
             ]),
             "required": .array([.string("query")])
@@ -631,6 +703,16 @@ let allTools: [Tool] = [
                 "emailLabels": .object([
                     "type": .string("array"),
                     "description": .string("Labels for each email (e.g. 'work', 'home'). Parallel to emails."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "urls": .object([
+                    "type": .string("array"),
+                    "description": .string("List of URLs (e.g. website, LinkedIn)."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "urlLabels": .object([
+                    "type": .string("array"),
+                    "description": .string("Labels for each URL (e.g. 'homepage', 'work'). Parallel to urls."),
                     "items": .object(["type": .string("string")])
                 ]),
                 "addressStreet": .object([
@@ -716,6 +798,36 @@ let allTools: [Tool] = [
                     "description": .string("Labels for each email. Parallel to emails."),
                     "items": .object(["type": .string("string")])
                 ]),
+                "urls": .object([
+                    "type": .string("array"),
+                    "description": .string("Replace all URLs with this list."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "urlLabels": .object([
+                    "type": .string("array"),
+                    "description": .string("Labels for each URL. Parallel to urls."),
+                    "items": .object(["type": .string("string")])
+                ]),
+                "addressStreet": .object([
+                    "type": .string("string"),
+                    "description": .string("Update street on the first address.")
+                ]),
+                "addressCity": .object([
+                    "type": .string("string"),
+                    "description": .string("Update city on the first address.")
+                ]),
+                "addressState": .object([
+                    "type": .string("string"),
+                    "description": .string("Update state on the first address.")
+                ]),
+                "addressZip": .object([
+                    "type": .string("string"),
+                    "description": .string("Update postal/ZIP code on the first address.")
+                ]),
+                "addressCountry": .object([
+                    "type": .string("string"),
+                    "description": .string("Update country on the first address.")
+                ]),
                 "birthday": .object([
                     "type": .string("string"),
                     "description": .string("New birthday (ISO 8601). Pass empty string to clear.")
@@ -741,6 +853,57 @@ let allTools: [Tool] = [
     ),
 
     // ── Notes ─────────────────────────────────────────────────────────────────
+
+    Tool(
+        name: "notes_list",
+        description: "List notes from the macOS Notes app, optionally filtered by folder.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "folder": .object([
+                    "type": .string("string"),
+                    "description": .string("Restrict to a specific folder. Omit to list all notes.")
+                ]),
+                "limit": .object([
+                    "type": .string("integer"),
+                    "description": .string("Maximum results (1–200). Defaults to 20."),
+                    "minimum": .int(1),
+                    "maximum": .int(200),
+                    "default": .int(20)
+                ]),
+                "offset": .object([
+                    "type": .string("integer"),
+                    "description": .string("Number of notes to skip for pagination. Defaults to 0."),
+                    "minimum": .int(0),
+                    "default": .int(0)
+                ])
+            ]),
+            "required": .array([])
+        ])
+    ),
+
+    Tool(
+        name: "notes_get",
+        description: "Get the full content of a note by noteId or title (uses osascript).",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "noteId": .object([
+                    "type": .string("string"),
+                    "description": .string("AppleScript note ID (preferred).")
+                ]),
+                "title": .object([
+                    "type": .string("string"),
+                    "description": .string("Title of the note (used when noteId is absent).")
+                ]),
+                "folder": .object([
+                    "type": .string("string"),
+                    "description": .string("Narrow the title search to a specific folder.")
+                ])
+            ]),
+            "required": .array([])
+        ])
+    ),
 
     Tool(
         name: "notes_create",

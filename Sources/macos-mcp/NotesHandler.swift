@@ -111,6 +111,152 @@ end tell
         return "✓ Appended content to note \"\(noteName)\""
     }
 
+    static func listNotes(args: [String: Value]) async throws -> String {
+        let folderArg = args["folder"]?.stringValue
+        let limit     = args["limit"].asInt ?? 20
+        let offset    = args["offset"].asInt ?? 0
+
+        let script: String
+        if let folder = folderArg {
+            let safeFolder = escapeAppleScript(folder)
+            script = """
+tell application "Notes"
+    set targetFolder to folder "\(safeFolder)"
+    set output to ""
+    repeat with n in notes of targetFolder
+        set noteModified to ""
+        try
+            set noteModified to modification date of n as string
+        end try
+        set output to output & (id of n) & "||" & (name of n) & "||" & "\(safeFolder)" & "||" & noteModified & "\\n"
+    end repeat
+    return output
+end tell
+"""
+        } else {
+            script = """
+tell application "Notes"
+    set output to ""
+    repeat with fld in folders
+        repeat with n in notes of fld
+            set noteModified to ""
+            try
+                set noteModified to modification date of n as string
+            end try
+            set output to output & (id of n) & "||" & (name of n) & "||" & (name of fld) & "||" & noteModified & "\\n"
+        end repeat
+    end repeat
+    return output
+end tell
+"""
+        }
+
+        let rawOutput = try await runAppleScript(script)
+        let lines     = rawOutput.split(separator: "\n", omittingEmptySubsequences: true)
+        let total     = lines.count
+        let paged     = Array(lines.dropFirst(offset).prefix(limit))
+
+        guard !paged.isEmpty else {
+            return folderArg.map { "No notes in folder \"\($0)\"." } ?? "No notes found."
+        }
+
+        let scope = folderArg.map { " in \"\($0)\"" } ?? ""
+        var out = "Found \(paged.count) note(s)\(scope) (offset \(offset), total \(total)):\n\n"
+        for line in paged {
+            let parts    = line.split(separator: "||", maxSplits: 3, omittingEmptySubsequences: false).map(String.init)
+            let noteId   = parts.count > 0 ? parts[0] : "?"
+            let name     = parts.count > 1 ? parts[1] : "?"
+            let folder   = parts.count > 2 ? parts[2] : "?"
+            let modified = parts.count > 3 ? parts[3] : ""
+            out += "• \"\(name)\" (folder: \(folder))"
+            if !modified.isEmpty { out += "\n  Modified: \(modified)" }
+            out += "\n  ID: \(noteId)\n\n"
+        }
+        return out
+    }
+
+    static func getNote(args: [String: Value]) async throws -> String {
+        let noteIdArg  = args["noteId"]?.stringValue
+        let titleArg   = args["title"]?.stringValue
+        let folderArg  = args["folder"]?.stringValue
+
+        guard noteIdArg != nil || titleArg != nil else {
+            throw notesError("Either 'noteId' or 'title' must be provided")
+        }
+
+        let script: String
+        if let noteId = noteIdArg {
+            let safeId = escapeAppleScript(noteId)
+            script = """
+tell application "Notes"
+    set targetNote to note id "\(safeId)"
+    set noteModified to ""
+    try
+        set noteModified to modification date of targetNote as string
+    end try
+    return (id of targetNote) & "||" & (name of targetNote) & "||" & (name of container of targetNote) & "||" & noteModified & "||" & (body of targetNote)
+end tell
+"""
+        } else {
+            let safeTitle = escapeAppleScript(titleArg!)
+            if let folder = folderArg {
+                let safeFolder = escapeAppleScript(folder)
+                script = """
+tell application "Notes"
+    set targetFolder to folder "\(safeFolder)"
+    set matchingNotes to (notes of targetFolder whose name is "\(safeTitle)")
+    if (count of matchingNotes) > 0 then
+        set targetNote to item 1 of matchingNotes
+        set noteModified to ""
+        try
+            set noteModified to modification date of targetNote as string
+        end try
+        return (id of targetNote) & "||" & (name of targetNote) & "||" & "\(safeFolder)" & "||" & noteModified & "||" & (body of targetNote)
+    else
+        error "No note found with title: \(safeTitle) in folder \(safeFolder)"
+    end if
+end tell
+"""
+            } else {
+                script = """
+tell application "Notes"
+    set found to false
+    repeat with fld in folders
+        set matchingNotes to (notes of fld whose name is "\(safeTitle)")
+        if (count of matchingNotes) > 0 then
+            set targetNote to item 1 of matchingNotes
+            set noteModified to ""
+            try
+                set noteModified to modification date of targetNote as string
+            end try
+            set found to true
+            return (id of targetNote) & "||" & (name of targetNote) & "||" & (name of fld) & "||" & noteModified & "||" & (body of targetNote)
+        end if
+    end repeat
+    if not found then
+        error "No note found with title: \(safeTitle)"
+    end if
+end tell
+"""
+            }
+        }
+
+        let result = try await runAppleScript(script)
+        let parts  = result.split(separator: "||", maxSplits: 4, omittingEmptySubsequences: false).map(String.init)
+        let noteId   = parts.count > 0 ? parts[0] : "?"
+        let name     = parts.count > 1 ? parts[1] : "?"
+        let folder   = parts.count > 2 ? parts[2] : "?"
+        let modified = parts.count > 3 ? parts[3] : ""
+        let body     = parts.count > 4 ? parts[4] : ""
+
+        var out = "Note: \"\(name)\"\n"
+        out += "Folder: \(folder)\n"
+        if !modified.isEmpty { out += "Modified: \(modified)\n" }
+        out += "ID: \(noteId)\n\n"
+        out += body
+        return out
+    }
+
     static func searchNotes(args: [String: Value]) async throws -> String {
         guard let query = args["query"]?.stringValue, !query.isEmpty else {
             throw notesError("'query' is required")

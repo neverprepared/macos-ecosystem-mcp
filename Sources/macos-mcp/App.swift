@@ -4,7 +4,7 @@ import Foundation
 @main
 struct MacOSMCPApp {
     static func main() async throws {
-        log("Starting macOS Ecosystem MCP Server v0.5.2 (Swift/EventKit/Contacts)")
+        log("Starting macOS Ecosystem MCP Server v0.6.0 (Swift/EventKit/Contacts)")
 
         // Initialise EventKit and request permissions before handling any requests
         let ekManager = EventKitManager()
@@ -16,7 +16,7 @@ struct MacOSMCPApp {
 
         let server = Server(
             name: "macos-ecosystem-mcp",
-            version: "0.5.2",
+            version: "0.6.0",
             capabilities: Server.Capabilities(
                 tools: .init(listChanged: false)
             )
@@ -30,7 +30,7 @@ struct MacOSMCPApp {
             await dispatch(params: params, ekManager: ekManager, cnManager: cnManager)
         }
 
-        log("All 24 tools registered, connecting stdio transport")
+        log("All 29 tools registered, connecting stdio transport")
 
         let transport = StdioTransport()
         try await server.start(transport: transport)
@@ -55,10 +55,14 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, c
             // ── Reminders ──────────────────────────────────────────────────
             case "reminders_list":
                 return try await ekManager.listReminders(args: params.arguments ?? [:])
+            case "reminders_get":
+                return try await ekManager.getReminder(args: params.arguments ?? [:])
             case "reminders_add":
                 return try await ekManager.addReminder(args: params.arguments ?? [:])
             case "reminders_complete":
                 return try await ekManager.completeReminder(args: params.arguments ?? [:])
+            case "reminders_uncomplete":
+                return try await ekManager.uncompleteReminder(args: params.arguments ?? [:])
             case "reminders_update":
                 return try await ekManager.updateReminder(args: params.arguments ?? [:])
             case "reminders_delete":
@@ -67,6 +71,8 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, c
                 return try await ekManager.searchReminders(args: params.arguments ?? [:])
 
             // ── Calendar ───────────────────────────────────────────────────
+            case "calendar_list_calendars":
+                return try await ekManager.listCalendars(args: params.arguments ?? [:])
             case "calendar_list_events":
                 return try await ekManager.listEvents(args: params.arguments ?? [:])
             case "calendar_create_event":
@@ -93,6 +99,10 @@ private func dispatch(params: CallTool.Parameters, ekManager: EventKitManager, c
                 return try await cnManager.deleteContact(args: params.arguments ?? [:])
 
             // ── Notes (osascript) ──────────────────────────────────────────
+            case "notes_list":
+                return try await NotesHandler.listNotes(args: params.arguments ?? [:])
+            case "notes_get":
+                return try await NotesHandler.getNote(args: params.arguments ?? [:])
             case "notes_create":
                 return try await NotesHandler.createNote(args: params.arguments ?? [:])
             case "notes_append":

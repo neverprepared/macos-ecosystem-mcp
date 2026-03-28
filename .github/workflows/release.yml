@@ -84,7 +84,7 @@ jobs:
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: bin/macos-mcp-*
           draft: false
@@ -109,5 +109,5 @@ jobs:
           git config user.email "actions@github.com"
           git add Formula/macos-ecosystem-mcp.rb
           git diff --cached --quiet || git commit -m "chore: update formula to v${GITHUB_REF#refs/tags/v} [skip ci]"
-          git pull --rebase origin main
+          git pull --rebase --autostash origin main
           git push origin HEAD:main

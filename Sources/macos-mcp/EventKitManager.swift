@@ -231,6 +231,48 @@ actor EventKitManager {
         return "✓ Completed: \"\(reminder.title ?? title)\" in \"\(reminder.calendar?.title ?? "?")\""
     }
 
+    func uncompleteReminder(args: [String: Value]) async throws -> String {
+        let reminderId = args["reminderId"]?.stringValue
+        let titleArg   = args["title"]?.stringValue
+        let listArg    = args["list"]?.stringValue
+
+        guard reminderId != nil || titleArg != nil else {
+            throw ekError("Either 'reminderId' or 'title' must be provided")
+        }
+
+        if let rid = reminderId {
+            guard let item = store.calendarItem(withIdentifier: rid) as? EKReminder else {
+                throw ekError("No reminder found with ID: \(rid)")
+            }
+            item.isCompleted    = false
+            item.completionDate = nil
+            try store.save(item, commit: true)
+            return "✓ Uncompleted: \"\(item.title ?? rid)\""
+        }
+
+        let title = titleArg!
+        let lists = try reminderCalendars(named: listArg)
+        let pred  = store.predicateForReminders(in: lists)
+        let all   = await fetchReminders(matching: pred)
+        guard let reminder = all.first(where: { $0.title == title && $0.isCompleted }) else {
+            throw ekError("No completed reminder found with title: \"\(title)\"")
+        }
+        reminder.isCompleted    = false
+        reminder.completionDate = nil
+        try store.save(reminder, commit: true)
+        return "✓ Uncompleted: \"\(reminder.title ?? title)\" in \"\(reminder.calendar?.title ?? "?")\""
+    }
+
+    func getReminder(args: [String: Value]) async throws -> String {
+        guard let reminderId = args["reminderId"]?.stringValue, !reminderId.isEmpty else {
+            throw ekError("'reminderId' is required")
+        }
+        guard let item = store.calendarItem(withIdentifier: reminderId) as? EKReminder else {
+            throw ekError("No reminder found with ID: \(reminderId)")
+        }
+        return formatReminderSummary(item)
+    }
+
     func updateReminder(args: [String: Value]) async throws -> String {
         let reminderId = args["reminderId"]?.stringValue
         let titleArg   = args["title"]?.stringValue
@@ -394,6 +436,29 @@ actor EventKitManager {
         return out
     }
 
+    // MARK: - Calendar Calendars
+
+    func listCalendars(args: [String: Value]) async throws -> String {
+        let calendars = store.calendars(for: .event)
+        guard !calendars.isEmpty else { return "No calendars found." }
+        var out = "Calendars (\(calendars.count)):\n\n"
+        for cal in calendars.sorted(by: { $0.title < $1.title }) {
+            let typeLabel: String
+            switch cal.type {
+            case .local:        typeLabel = "Local"
+            case .calDAV:       typeLabel = "iCloud / CalDAV"
+            case .exchange:     typeLabel = "Exchange"
+            case .subscription: typeLabel = "Subscription"
+            case .birthday:     typeLabel = "Birthday"
+            @unknown default:   typeLabel = "Unknown"
+            }
+            out += "• \(cal.title) [\(typeLabel)]\n"
+            if let src = cal.source?.title, !src.isEmpty { out += "  Source: \(src)\n" }
+            out += "  ID: \(cal.calendarIdentifier)\n\n"
+        }
+        return out
+    }
+
     // MARK: - Calendar Events
 
     func listEvents(args: [String: Value]) async throws -> String {
@@ -470,6 +535,17 @@ actor EventKitManager {
         // Alarms
         for mins in alertMins {
             event.addAlarm(EKAlarm(relativeOffset: -Double(mins) * 60))
+        }
+
+        // Recurrence
+        if let freqStr = args["recurrenceFrequency"]?.stringValue {
+            let interval    = args["recurrenceInterval"].asInt ?? 1
+            let endDateStr  = args["recurrenceEndDate"]?.stringValue
+            let occurrences = args["recurrenceOccurrences"].asInt
+            if let rule = buildRecurrenceRule(frequency: freqStr, interval: interval,
+                                              endDate: endDateStr, occurrences: occurrences) {
+                event.addRecurrenceRule(rule)
+            }
         }
 
         try store.save(event, span: .thisEvent, commit: true)
