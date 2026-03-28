@@ -29,6 +29,7 @@ actor ContactsManager {
         CNContactEmailAddressesKey,
         CNContactPostalAddressesKey,
         CNContactBirthdayKey,
+        CNContactUrlAddressesKey,
     ] as [CNKeyDescriptor]
 
     // MARK: Permissions
@@ -67,6 +68,7 @@ actor ContactsManager {
             throw contactsError("'query' is required")
         }
         let limit       = args["limit"].asInt ?? 20
+        let offset      = args["offset"].asInt ?? 0
         let accountName = args["account"]?.stringValue
         let q           = query.trimmingCharacters(in: .whitespaces)
 
@@ -107,15 +109,16 @@ actor ContactsManager {
             contacts = contacts.filter { containerIds.contains($0.identifier) }
         }
 
-        let limited = Array(contacts.prefix(limit))
-        guard !limited.isEmpty else {
+        let total   = contacts.count
+        let paged   = Array(contacts.dropFirst(offset).prefix(limit))
+        guard !paged.isEmpty else {
             let scope = accountName.map { " in \"\($0)\"" } ?? ""
             return "No contacts matching \"\(query)\"\(scope)."
         }
 
         let scope = accountName.map { " in \"\($0)\"" } ?? ""
-        var out = "Found \(limited.count) contact(s) matching \"\(query)\"\(scope):\n\n"
-        for c in limited { out += formatContactSummary(c) }
+        var out = "Found \(paged.count) contact(s) (offset \(offset), total \(total)) matching \"\(query)\"\(scope):\n\n"
+        for c in paged { out += formatContactSummary(c) }
         return out
     }
 
@@ -144,8 +147,9 @@ actor ContactsManager {
         contact.organizationName = args["organizationName"]?.stringValue ?? ""
         contact.jobTitle         = args["jobTitle"]?.stringValue         ?? ""
 
-        contact.phoneNumbers  = buildPhoneNumbers(args)
+        contact.phoneNumbers   = buildPhoneNumbers(args)
         contact.emailAddresses = buildEmailAddresses(args)
+        contact.urlAddresses   = buildURLAddresses(args)
 
         if let street = args["addressStreet"]?.stringValue, !street.isEmpty {
             let addr        = CNMutablePostalAddress()
@@ -193,6 +197,23 @@ actor ContactsManager {
         }
         if args["emails"] != nil {
             mutable.emailAddresses = buildEmailAddresses(args)
+        }
+        if args["urls"] != nil {
+            mutable.urlAddresses = buildURLAddresses(args)
+        }
+
+        // Update postal address fields — merge into first address if present
+        let addressKeys = ["addressStreet", "addressCity", "addressState", "addressZip", "addressCountry"]
+        if addressKeys.contains(where: { args[$0] != nil }) {
+            let existing = mutable.postalAddresses.first
+            let addr = existing?.value.mutableCopy() as? CNMutablePostalAddress ?? CNMutablePostalAddress()
+            if let v = args["addressStreet"]?.stringValue { addr.street     = v }
+            if let v = args["addressCity"]?.stringValue   { addr.city       = v }
+            if let v = args["addressState"]?.stringValue  { addr.state      = v }
+            if let v = args["addressZip"]?.stringValue    { addr.postalCode = v }
+            if let v = args["addressCountry"]?.stringValue { addr.country   = v }
+            let label = existing?.label ?? CNLabelHome
+            mutable.postalAddresses = [CNLabeledValue(label: label, value: addr)]
         }
 
         if let bdayStr = args["birthday"]?.stringValue {
@@ -252,6 +273,16 @@ actor ContactsManager {
         }
     }
 
+    private func buildURLAddresses(_ args: [String: Value]) -> [CNLabeledValue<NSString>] {
+        guard let urls = args["urls"]?.arrayValue else { return [] }
+        let labels = args["urlLabels"]?.arrayValue?.map { $0.stringValue ?? CNLabelWork } ?? []
+        return urls.enumerated().compactMap { i, v in
+            guard let url = v.stringValue, !url.isEmpty else { return nil }
+            let label = i < labels.count ? labels[i] : CNLabelWork
+            return CNLabeledValue(label: label, value: url as NSString)
+        }
+    }
+
     private func fullName(_ c: CNContact) -> String {
         let parts = [c.namePrefix, c.givenName, c.middleName, c.familyName, c.nameSuffix]
             .filter { !$0.isEmpty }
@@ -307,6 +338,14 @@ actor ContactsManager {
                 let label = CNLabeledValue<CNPostalAddress>.localizedString(forLabel: a.label ?? "")
                 let addr  = CNPostalAddressFormatter.string(from: a.value, style: .mailingAddress)
                 out += "  \(label): \(addr.replacingOccurrences(of: "\n", with: ", "))\n"
+            }
+        }
+
+        if !c.urlAddresses.isEmpty {
+            out += "\nURLs:\n"
+            for u in c.urlAddresses {
+                let label = CNLabeledValue<NSString>.localizedString(forLabel: u.label ?? "")
+                out += "  \(label): \(u.value as String)\n"
             }
         }
 
