@@ -1,19 +1,19 @@
 class MacosEcosystemMcp < Formula
   desc "MCP server for macOS Reminders, Calendar, and Notes via native EventKit"
   homepage "https://github.com/neverprepared/macos-ecosystem-mcp"
-  version "0.5.2"
+  version "0.6.0"
   license "MIT"
 
   on_macos do
     on_arm do
       url "https://github.com/neverprepared/macos-ecosystem-mcp/releases/download/v#{version}/macos-mcp-arm64"
-      sha256 "036dafffef9b4d5c6811ef67a402877973602c9556b74dc9fcbbd38b1598d4e9"
+      sha256 "b0573643219c667325b95a740156b37a9ed1818e541ea40fad23931f82e5cecb"
     end
 
     on_intel do
       # Intel Mac: binary runs via Rosetta 2
       url "https://github.com/neverprepared/macos-ecosystem-mcp/releases/download/v#{version}/macos-mcp-arm64"
-      sha256 "036dafffef9b4d5c6811ef67a402877973602c9556b74dc9fcbbd38b1598d4e9"
+      sha256 "b0573643219c667325b95a740156b37a9ed1818e541ea40fad23931f82e5cecb"
     end
   end
 
