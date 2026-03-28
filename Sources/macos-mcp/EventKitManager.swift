@@ -47,6 +47,7 @@ actor EventKitManager {
         let listName     = args["list"]?.stringValue
         let inclCompleted = args["includeCompleted"]?.boolValue ?? false
         let limit        = args["limit"].asInt ?? 50
+        let offset       = args["offset"].asInt ?? 0
 
         let targetLists = try reminderCalendars(named: listName)
 
@@ -56,12 +57,12 @@ actor EventKitManager {
                 withDueDateStarting: nil, ending: nil, calendars: targetLists)
 
         let reminders = await fetchReminders(matching: predicate)
-        let limited   = Array(reminders.prefix(limit))
+        let paged     = Array(reminders.dropFirst(offset).prefix(limit))
 
-        guard !limited.isEmpty else { return "No reminders found." }
+        guard !paged.isEmpty else { return "No reminders found." }
 
-        var out = "Found \(limited.count) reminder(s):\n\n"
-        for r in limited {
+        var out = "Found \(paged.count) reminder(s) (offset \(offset), total \(reminders.count)):\n\n"
+        for r in paged {
             out += "• \(r.isCompleted ? "✓" : "○") \(r.title ?? "(no title)")"
             let pri = r.priority
             if pri != 0 { out += " [\(priorityLabel(pri))]" }

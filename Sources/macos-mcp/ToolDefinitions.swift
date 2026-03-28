@@ -66,6 +66,12 @@ let allTools: [Tool] = [
                     "minimum": .int(1),
                     "maximum": .int(100),
                     "default": .int(50)
+                ]),
+                "offset": .object([
+                    "type": .string("integer"),
+                    "description": .string("Number of reminders to skip for pagination. Defaults to 0."),
+                    "minimum": .int(0),
+                    "default": .int(0)
                 ])
             ]),
             "required": .array([])

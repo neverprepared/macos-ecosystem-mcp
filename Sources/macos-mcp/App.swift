@@ -4,7 +4,7 @@ import Foundation
 @main
 struct MacOSMCPApp {
     static func main() async throws {
-        log("Starting macOS Ecosystem MCP Server v0.2.0 (Swift/EventKit)")
+        log("Starting macOS Ecosystem MCP Server v0.3.2 (Swift/EventKit)")
 
         // Initialise EventKit and request permissions before handling any requests
         let ekManager = EventKitManager()
@@ -14,7 +14,7 @@ struct MacOSMCPApp {
 
         let server = Server(
             name: "macos-ecosystem-mcp",
-            version: "0.2.0",
+            version: "0.3.2",
             capabilities: Server.Capabilities(
                 tools: .init(listChanged: false)
             )
