@@ -525,16 +525,22 @@ func ekError(_ message: String) -> NSError {
 
 func parseISO8601(_ string: String) -> Date? {
     let formatter = ISO8601DateFormatter()
+    // With timezone (e.g. "2026-03-29T18:00:00Z")
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     if let d = formatter.date(from: string) { return d }
-    // Try without fractional seconds
     formatter.formatOptions = [.withInternetDateTime]
     if let d = formatter.date(from: string) { return d }
-    // Try date-only (e.g. "2025-06-15")
-    let dateFmt = DateFormatter()
-    dateFmt.dateFormat = "yyyy-MM-dd"
-    dateFmt.locale = Locale(identifier: "en_US_POSIX")
-    return dateFmt.date(from: string)
+    // Local datetime without timezone (e.g. "2026-03-29T18:00:00")
+    let localFmt = DateFormatter()
+    localFmt.locale = Locale(identifier: "en_US_POSIX")
+    localFmt.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+    if let d = localFmt.date(from: string) { return d }
+    // Local datetime without seconds (e.g. "2026-03-29T18:00")
+    localFmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
+    if let d = localFmt.date(from: string) { return d }
+    // Date-only (e.g. "2026-03-29")
+    localFmt.dateFormat = "yyyy-MM-dd"
+    return localFmt.date(from: string)
 }
 
 func formatDate(_ date: Date) -> String {
