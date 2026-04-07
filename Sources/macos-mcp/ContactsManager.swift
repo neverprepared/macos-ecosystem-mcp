@@ -40,7 +40,12 @@ actor ContactsManager {
                 continuation.resume()
             }
         }
-        log("Contacts permissions requested")
+        let status = CNContactStore.authorizationStatus(for: .contacts)
+        if status == .authorized {
+            log("Contacts permissions granted")
+        } else {
+            log("Contacts permissions NOT granted (status: \(status.rawValue)) — contact tools will return errors")
+        }
     }
 
     // MARK: - Tools
@@ -93,7 +98,7 @@ actor ContactsManager {
             predicate = CNContact.predicateForContactsInContainer(withIdentifier: cid)
         } else if q.contains("@") {
             predicate = CNContact.predicateForContacts(matchingEmailAddress: q)
-        } else if q.filter({ $0.isNumber }).count > 5 {
+        } else if isPhoneQuery(q) {
             predicate = CNContact.predicateForContacts(matching: CNPhoneNumber(stringValue: q))
         } else {
             predicate = CNContact.predicateForContacts(matchingName: q)
@@ -283,6 +288,17 @@ actor ContactsManager {
         }
     }
 
+    /// Returns true when the query looks like a phone number rather than a name.
+    /// Requires the string to contain only phone-safe characters (digits, spaces,
+    /// dashes, parens, plus, dots) AND at least 4 digits. This prevents strings
+    /// like "Project 123456" from triggering a phone lookup while still matching
+    /// common formats such as "+1 (415) 555-0100" or "415-555-0100".
+    private func isPhoneQuery(_ q: String) -> Bool {
+        let phoneChars = CharacterSet.decimalDigits.union(CharacterSet(charactersIn: " +-()."))
+        guard q.unicodeScalars.allSatisfy({ phoneChars.contains($0) }) else { return false }
+        return q.filter(\.isNumber).count >= 4
+    }
+
     private func fullName(_ c: CNContact) -> String {
         let parts = [c.namePrefix, c.givenName, c.middleName, c.familyName, c.nameSuffix]
             .filter { !$0.isEmpty }
@@ -300,8 +316,8 @@ actor ContactsManager {
         if let phone = c.phoneNumbers.first?.value.stringValue {
             out += "\n  Phone: \(phone)"
         }
-        if let email = c.emailAddresses.first.map({ $0.value as String }) {
-            out += "\n  Email: \(email)"
+        if let first = c.emailAddresses.first {
+            out += "\n  Email: \(first.value as String)"
         }
         out += "\n\n"
         return out

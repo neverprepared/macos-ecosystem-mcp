@@ -20,13 +20,15 @@ enum NotesHandler {
         let safeBody   = escapeAppleScript(body)
         let safeFolder = escapeAppleScript(folder)
 
-        // The first line of a note's body becomes its title in Notes.
-        let content = "<h1>\(safeTitle)</h1><div>\(safeBody)</div>"
+        // Set the note name explicitly via the `name` property so the title is not
+        // duplicated in the body. Previously the body contained <h1>title</h1> which
+        // caused the title to appear twice in the Notes UI.
+        let content = "<div>\(safeBody)</div>"
 
         let script = """
 tell application "Notes"
     set targetFolder to folder "\(safeFolder)"
-    set newNote to make new note at targetFolder with properties {body:"\(content)"}
+    set newNote to make new note at targetFolder with properties {name:"\(safeTitle)", body:"\(content)"}
     return id of newNote & "|" & name of newNote & "|" & name of targetFolder
 end tell
 """
@@ -288,9 +290,6 @@ tell application "Notes"
                 set noteModified to modification date of n as string
             end try
             set excerpt to noteBody
-            if (count of excerpt) > 200 then
-                set excerpt to text 1 thru 200 of excerpt
-            end if
             set output to output & noteId & "||" & noteName & "||" & name of targetFolder & "||" & excerpt & "||" & noteCreated & "||" & noteModified & "\\n"
         end if
     end repeat
@@ -345,10 +344,12 @@ end tell
             let name     = parts.count > 1 ? parts[1] : "?"
             let folder   = parts.count > 2 ? parts[2] : "?"
             let excerpt  = parts.count > 3 ? parts[3].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            let created  = parts.count > 4 ? parts[4] : ""
             let modified = parts.count > 5 ? parts[5] : ""
             out += "• \"\(name)\" (folder: \(folder))"
+            if !created.isEmpty  { out += "\n  Created: \(created)" }
             if !modified.isEmpty { out += "\n  Modified: \(modified)" }
-            if !excerpt.isEmpty  { out += "\n  Preview: \(String(excerpt.prefix(150)))" }
+            if !excerpt.isEmpty  { out += "\n  Preview: \(String(excerpt.prefix(200)))" }
             out += "\n  ID: \(noteId)\n\n"
         }
         return out
@@ -370,6 +371,13 @@ end tell
                 process.standardInput  = stdinPipe
                 process.standardOutput = stdoutPipe
                 process.standardError  = stderrPipe
+
+                // Always close read-ends of stdout/stderr so file descriptors are not
+                // leaked when process.run() throws or on any early-return path.
+                defer {
+                    stdoutPipe.fileHandleForReading.closeFile()
+                    stderrPipe.fileHandleForReading.closeFile()
+                }
 
                 do {
                     try process.run()
@@ -466,15 +474,24 @@ end tell
     /// Escapes a Swift string for safe embedding inside an AppleScript double-quoted string.
     ///
     /// Rules:
+    ///   - Control characters (U+0000–U+0009, U+000B–U+001F, U+007F) are stripped — they
+    ///     have no safe representation in AppleScript strings and can cause parser failures.
+    ///   - CR+LF and bare CR are normalised to LF before further processing.
     ///   - `"` becomes `" & quote & "` (AppleScript string concatenation with the `quote` constant)
-    ///   - Literal newlines become `" & return & "` so they are preserved as line breaks
-    ///   - Carriage returns are dropped (CR+LF → LF)
+    ///   - Literal newlines become `" & return & "` so they are preserved as line breaks.
     static func escapeAppleScript(_ input: String) -> String {
         var s = input
+        // Normalise line endings before stripping other control chars.
         s = s.replacingOccurrences(of: "\r\n", with: "\n")
         s = s.replacingOccurrences(of: "\r",   with: "\n")
-        s = s.replacingOccurrences(of: "\"",   with: "\" & quote & \"")
-        s = s.replacingOccurrences(of: "\n",   with: "\" & return & \"")
+        // Strip null bytes and remaining control characters, keeping only printable
+        // characters and the newline (U+000A) which is handled below.
+        s = String(s.unicodeScalars.filter { scalar in
+            let v = scalar.value
+            return v == 0x0A || (v >= 0x20 && v != 0x7F)
+        })
+        s = s.replacingOccurrences(of: "\"", with: "\" & quote & \"")
+        s = s.replacingOccurrences(of: "\n", with: "\" & return & \"")
         return s
     }
 }

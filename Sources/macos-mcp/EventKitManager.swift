@@ -149,8 +149,11 @@ actor EventKitManager {
 
         // Due date
         if let ds = dueDateStr, let date = parseISO8601(ds) {
-            var components = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute, .second], from: date)
+            // Extract components in the local timezone explicitly so that the calendar's
+            // timezone and the component tag are always consistent.
+            var localCal = Calendar.current
+            localCal.timeZone = TimeZone.current
+            var components = localCal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
             components.timeZone = TimeZone.current
             reminder.dueDateComponents = components
         }
@@ -172,10 +175,11 @@ actor EventKitManager {
             let interval    = args["recurrenceInterval"].asInt ?? 1
             let endDateStr  = args["recurrenceEndDate"]?.stringValue
             let occurrences = args["recurrenceOccurrences"].asInt
-            if let rule = buildRecurrenceRule(frequency: freqStr, interval: interval,
-                                              endDate: endDateStr, occurrences: occurrences) {
-                reminder.recurrenceRules = [rule]
+            guard let rule = buildRecurrenceRule(frequency: freqStr, interval: interval,
+                                                endDate: endDateStr, occurrences: occurrences) else {
+                throw ekError("Invalid recurrenceFrequency '\(freqStr)'. Must be: daily, weekly, monthly, or yearly")
             }
+            reminder.recurrenceRules = [rule]
         }
 
         // Location alarm
@@ -345,10 +349,11 @@ actor EventKitManager {
             let interval    = args["recurrenceInterval"].asInt ?? 1
             let endDateStr  = args["recurrenceEndDate"]?.stringValue
             let occurrences = args["recurrenceOccurrences"].asInt
-            if let rule = buildRecurrenceRule(frequency: freqStr, interval: interval,
-                                              endDate: endDateStr, occurrences: occurrences) {
-                reminder.recurrenceRules = [rule]
+            guard let rule = buildRecurrenceRule(frequency: freqStr, interval: interval,
+                                                endDate: endDateStr, occurrences: occurrences) else {
+                throw ekError("Invalid recurrenceFrequency '\(freqStr)'. Must be: daily, weekly, monthly, or yearly")
             }
+            reminder.recurrenceRules = [rule]
         } else if args["clearRecurrence"]?.boolValue == true {
             reminder.recurrenceRules = nil
         }
@@ -542,10 +547,11 @@ actor EventKitManager {
             let interval    = args["recurrenceInterval"].asInt ?? 1
             let endDateStr  = args["recurrenceEndDate"]?.stringValue
             let occurrences = args["recurrenceOccurrences"].asInt
-            if let rule = buildRecurrenceRule(frequency: freqStr, interval: interval,
-                                              endDate: endDateStr, occurrences: occurrences) {
-                event.addRecurrenceRule(rule)
+            guard let rule = buildRecurrenceRule(frequency: freqStr, interval: interval,
+                                                endDate: endDateStr, occurrences: occurrences) else {
+                throw ekError("Invalid recurrenceFrequency '\(freqStr)'. Must be: daily, weekly, monthly, or yearly")
             }
+            event.addRecurrenceRule(rule)
         }
 
         try store.save(event, span: .thisEvent, commit: true)
@@ -570,6 +576,12 @@ actor EventKitManager {
         }
         if let es = args["endDate"]?.stringValue, let d = parseISO8601(es) {
             event.endDate = d
+        }
+
+        // Re-validate after applying new dates — patching only startDate past the
+        // existing endDate (or vice versa) would produce a zero/negative-duration event.
+        if let start = event.startDate, let end = event.endDate, end <= start {
+            throw ekError("'endDate' must be after 'startDate'")
         }
 
         try store.save(event, span: .thisEvent, commit: true)
@@ -603,8 +615,11 @@ actor EventKitManager {
             start = d.addingTimeInterval(-86400)
             end   = d.addingTimeInterval(86400)
         } else {
-            start = Date().addingTimeInterval(-365 * 86400)
-            end   = Date().addingTimeInterval(2 * 365 * 86400)
+            // Without a date hint, search ±30 days from today. The previous ±1 year window
+            // was too broad and risked matching unintended events with the same title.
+            // For unambiguous deletion, provide 'date' or use 'eventId'.
+            start = Date().addingTimeInterval(-30 * 86400)
+            end   = Date().addingTimeInterval(30 * 86400)
         }
 
         let pred   = store.predicateForEvents(withStart: start, end: end, calendars: nil)
@@ -622,8 +637,8 @@ actor EventKitManager {
               let anchorDate = parseISO8601(dateStr) else {
             throw ekError("'date' is required (ISO 8601)")
         }
-        guard let duration = args["duration"].asInt, duration > 0 else {
-            throw ekError("'duration' is required (minutes)")
+        guard let duration = args["duration"].asInt, duration >= 15 else {
+            throw ekError("'duration' is required and must be at least 15 minutes")
         }
         let workStart = args["workingHoursStart"].asInt ?? 9
         let workEnd   = args["workingHoursEnd"].asInt   ?? 17
@@ -647,7 +662,8 @@ actor EventKitManager {
         let calendars = eventCalendars(named: calName)
         let pred      = store.predicateForEvents(withStart: dayBegin, end: dayEnd, calendars: calendars)
         let events    = store.events(matching: pred)
-            .sorted { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) }
+            .filter { !$0.isAllDay && $0.startDate != nil }   // all-day events have midnight boundaries that break gap math
+            .sorted { $0.startDate! < $1.startDate! }
 
         // Find gaps
         var slots: [(start: Date, end: Date, minutes: Int)] = []
@@ -782,14 +798,18 @@ actor EventKitManager {
         if let url = r.url {
             out += "\n  URL: \(url.absoluteString)"
         }
-        // Time-based alarms
+        // Partition alarms in a single pass instead of filtering the array twice.
         if let alarms = r.alarms {
-            let timeAlarms = alarms.filter { $0.structuredLocation == nil && $0.absoluteDate == nil }
+            var timeAlarms: [EKAlarm] = []
+            var locAlarms:  [EKAlarm] = []
+            for alarm in alarms {
+                if alarm.structuredLocation != nil { locAlarms.append(alarm) }
+                else if alarm.absoluteDate == nil  { timeAlarms.append(alarm) }
+            }
             if !timeAlarms.isEmpty {
                 let labels = timeAlarms.map { "\(Int(-$0.relativeOffset / 60))min before" }
                 out += "\n  Alarms: \(labels.joined(separator: ", "))"
             }
-            let locAlarms = alarms.filter { $0.structuredLocation != nil }
             for la in locAlarms {
                 if let loc = la.structuredLocation {
                     let dir = la.proximity == .leave ? "leaving" : "arriving at"

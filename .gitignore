@@ -30,6 +30,11 @@ DerivedData/
 *.log
 logs/
 
+# Legacy Node.js build output (project rewritten in Swift)
+dist/
+node_modules/
+pnpm-lock.yaml
+
 # Temporary
 *.tmp
 .temp/
