@@ -74,6 +74,10 @@ let allTools: [Tool] = [
                     "type": .string("string"),
                     "description": .string("ISO 8601 due date, e.g. '2025-06-15T09:00:00Z'")
                 ]),
+                "startDate": .object([
+                    "type": .string("string"),
+                    "description": .string("ISO 8601 start date. The Reminders app stores a date-without-alert here rather than in dueDate, so set this to reproduce that behaviour.")
+                ]),
                 "priority": .object([
                     "type": .string("string"),
                     "enum": .array([.string("none"), .string("low"), .string("medium"), .string("high")]),
@@ -263,7 +267,7 @@ let allTools: [Tool] = [
 
     Tool(
         name: "reminders_update",
-        description: "Update an existing reminder's title, notes, due date, priority, list, URL, alarms, recurrence, or location alarm.",
+        description: "Update an existing reminder's title, notes, due date, start date, priority, list, URL, alarms, recurrence, or location alarm.",
         inputSchema: .object([
             "type": .string("object"),
             "properties": .object([
@@ -290,6 +294,14 @@ let allTools: [Tool] = [
                 "dueDate": .object([
                     "type": .string("string"),
                     "description": .string("New ISO 8601 due date. Pass empty string to clear.")
+                ]),
+                "startDate": .object([
+                    "type": .string("string"),
+                    "description": .string("New ISO 8601 start date. Pass empty string to clear. The Reminders app stores a date-without-alert here, so clearing dueDate alone may leave a visible date behind.")
+                ]),
+                "clearAllDates": .object([
+                    "type": .string("boolean"),
+                    "description": .string("Set true to strip every scheduling field at once: due date, start date, and all time and absolute-date alarms. Location alarms are kept.")
                 ]),
                 "priority": .object([
                     "type": .string("string"),

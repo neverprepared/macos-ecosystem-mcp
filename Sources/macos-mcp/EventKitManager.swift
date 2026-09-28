@@ -128,7 +128,8 @@ actor EventKitManager {
         }
         let listName    = args["list"]?.stringValue ?? "Reminders"
         let noteText    = args["notes"]?.stringValue
-        let dueDateStr  = args["dueDate"]?.stringValue
+        let dueDateStr   = args["dueDate"]?.stringValue
+        let startDateStr = args["startDate"]?.stringValue
         let priorityStr = args["priority"]?.stringValue ?? "none"
         let urlStr      = args["url"]?.stringValue
 
@@ -149,13 +150,13 @@ actor EventKitManager {
 
         // Due date
         if let ds = dueDateStr, let date = parseISO8601(ds) {
-            // Extract components in the local timezone explicitly so that the calendar's
-            // timezone and the component tag are always consistent.
-            var localCal = Calendar.current
-            localCal.timeZone = TimeZone.current
-            var components = localCal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-            components.timeZone = TimeZone.current
-            reminder.dueDateComponents = components
+            reminder.dueDateComponents = reminderDateComponents(from: date)
+        }
+
+        // Start date. The Reminders app writes this — not dueDateComponents — for an item
+        // given a date but no "remind me" time, so it must be settable and readable here.
+        if let ss = startDateStr, let date = parseISO8601(ss) {
+            reminder.startDateComponents = reminderDateComponents(from: date)
         }
 
         // URL
@@ -312,14 +313,27 @@ actor EventKitManager {
         if let priorityStr = args["priority"]?.stringValue {
             reminder.priority = priorityValue(priorityStr)
         }
+        // Applied before the explicit dueDate/startDate handling below so an explicit
+        // value in the same call still wins.
+        if args["clearAllDates"]?.boolValue == true {
+            reminder.dueDateComponents   = nil
+            reminder.startDateComponents = nil
+            // Drop time and absolute-date alarms; location alarms are not dates.
+            let locAlarms = reminder.alarms?.filter { $0.structuredLocation != nil } ?? []
+            reminder.alarms = locAlarms.isEmpty ? nil : locAlarms
+        }
         if let dueDateStr = args["dueDate"]?.stringValue {
             if dueDateStr == "" {
                 reminder.dueDateComponents = nil
             } else if let date = parseISO8601(dueDateStr) {
-                var components = Calendar.current.dateComponents(
-                    [.year, .month, .day, .hour, .minute, .second], from: date)
-                components.timeZone = TimeZone.current
-                reminder.dueDateComponents = components
+                reminder.dueDateComponents = reminderDateComponents(from: date)
+            }
+        }
+        if let startDateStr = args["startDate"]?.stringValue {
+            if startDateStr == "" {
+                reminder.startDateComponents = nil
+            } else if let date = parseISO8601(startDateStr) {
+                reminder.startDateComponents = reminderDateComponents(from: date)
             }
         }
         if let newList = args["newList"]?.stringValue {
@@ -790,6 +804,9 @@ actor EventKitManager {
         if let due = r.dueDateComponents.flatMap({ Calendar.current.date(from: $0) }) {
             out += " (Due: \(formatDate(due)))"
         }
+        if let start = r.startDateComponents.flatMap({ Calendar.current.date(from: $0) }) {
+            out += " (Starts: \(formatDate(start)))"
+        }
         out += "\n  List: \(r.calendar?.title ?? "Unknown")"
         out += "\n  ID: \(r.calendarItemIdentifier)"
         if let notes = r.notes, !notes.isEmpty {
@@ -801,14 +818,20 @@ actor EventKitManager {
         // Partition alarms in a single pass instead of filtering the array twice.
         if let alarms = r.alarms {
             var timeAlarms: [EKAlarm] = []
+            var absAlarms:  [EKAlarm] = []
             var locAlarms:  [EKAlarm] = []
             for alarm in alarms {
                 if alarm.structuredLocation != nil { locAlarms.append(alarm) }
-                else if alarm.absoluteDate == nil  { timeAlarms.append(alarm) }
+                else if alarm.absoluteDate != nil  { absAlarms.append(alarm) }
+                else                               { timeAlarms.append(alarm) }
             }
             if !timeAlarms.isEmpty {
                 let labels = timeAlarms.map { "\(Int(-$0.relativeOffset / 60))min before" }
                 out += "\n  Alarms: \(labels.joined(separator: ", "))"
+            }
+            if !absAlarms.isEmpty {
+                let labels = absAlarms.compactMap { $0.absoluteDate.map(formatDate) }
+                out += "\n  Alarms (absolute): \(labels.joined(separator: ", "))"
             }
             for la in locAlarms {
                 if let loc = la.structuredLocation {
@@ -852,6 +875,17 @@ func parseISO8601(_ string: String) -> Date? {
     // Date-only (e.g. "2026-03-29")
     localFmt.dateFormat = "yyyy-MM-dd"
     return localFmt.date(from: string)
+}
+
+/// Build the DateComponents EventKit expects for a reminder's due/start date, tagged with
+/// the local timezone so the calendar and the components never disagree.
+func reminderDateComponents(from date: Date) -> DateComponents {
+    var localCal = Calendar.current
+    localCal.timeZone = TimeZone.current
+    var components = localCal.dateComponents(
+        [.year, .month, .day, .hour, .minute, .second], from: date)
+    components.timeZone = TimeZone.current
+    return components
 }
 
 func formatDate(_ date: Date) -> String {
